@@ -4,7 +4,7 @@ Prototype frontend berdasarkan PRD HBI Marketing Dashboard dengan visual Neumorp
 
 ## Menjalankan
 
-Buka index.html di browser, atau jalankan server tanpa dependency dengan perintah node server.js. Untuk membuka dari HP satu jaringan, gunakan URL LAN yang dicetak server, misalnya http://192.168.0.108:4173.
+Buka index.html di browser, atau jalankan server tanpa dependency dengan perintah node preview-server.js. Untuk membuka dari HP satu jaringan, gunakan URL LAN yang dicetak server, misalnya http://192.168.0.108:4173.
 
 ## Cakupan prototype
 
