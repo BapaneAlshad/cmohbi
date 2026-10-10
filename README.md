@@ -1,6 +1,14 @@
 # Ngapaya — Marketing OS
 
-Prototype frontend berdasarkan PRD HBI Marketing Dashboard dengan visual Neumorphism.
+Prototype frontend berdasarkan PRD HBI Marketing Dashboard dengan visual Modern Minimalist SaaS Dashboard dan subtle Soft UI.
+
+## Design system
+
+- Inter sebagai tipografi utama dengan hierarchy yang ringkas dan mudah dibaca.
+- Surface putih, background netral, border tipis, radius 8–12px, dan shadow berlapis yang sangat halus.
+- Tombol utama hitam, outline icon konsisten, badge status pastel, serta dark mode dengan depth yang rendah.
+- Sidebar dapat diciutkan di desktop dan berubah menjadi drawer dengan backdrop di perangkat mobile.
+- Grid, kartu, kalender, kanban, tabel, modal, dan form responsif di berbagai ukuran layar.
 
 ## Menjalankan
 

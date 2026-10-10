@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="theme-color" content="#eef1f7" />
+  <meta name="theme-color" content="#f8f9fa" />
   <title>Ngapaya — Marketing OS</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
@@ -13,10 +13,11 @@
     <aside class="sidebar" id="sidebar">
       <div class="brand-wrap">
         <div class="brand-mark">N</div>
-        <div>
+        <div class="brand-copy">
           <div class="brand-name">ngapaya</div>
           <div class="brand-subtitle">Marketing OS</div>
         </div>
+        <button class="icon-button sidebar-collapse" data-action="toggle-sidebar-collapse" aria-label="Ciutkan sidebar"><span data-icon="panel-left-close"></span></button>
         <button class="icon-button close-sidebar" data-action="close-sidebar" aria-label="Tutup menu"><span data-icon="close"></span></button>
       </div>
 
@@ -54,10 +55,11 @@
         <div class="user-mini">
           <div class="avatar avatar-purple">AS</div>
           <div class="user-mini-copy"><strong>Andi Saputra</strong><span>CMO · HBI</span></div>
-          <button class="icon-button" data-view="account" aria-label="Buka akun">•••</button>
+          <button class="icon-button" data-view="account" aria-label="Buka akun"><span data-icon="more-horizontal"></span></button>
         </div>
       </div>
     </aside>
+    <button class="sidebar-backdrop" data-action="close-sidebar" aria-label="Tutup menu"></button>
 
     <main class="main-area">
       <header class="topbar">
@@ -66,7 +68,7 @@
           <div class="crumbs"><span>Workspace</span><b>/</b><strong id="page-title">Dashboard</strong></div>
         </div>
         <div class="topbar-actions">
-          <label class="search-box"><span data-icon="search"></span><input id="global-search" type="search" placeholder="Cari apa saja..." /></label>
+          <label class="search-box"><span data-icon="search"></span><input id="global-search" type="search" placeholder="Cari apa saja..." aria-label="Cari di workspace" /></label>
           <button class="icon-button theme-button" data-action="toggle-theme" aria-label="Ubah tema"><span data-icon="moon"></span></button>
           <button class="icon-button notification-button" data-action="notifications" aria-label="Notifikasi"><span data-icon="bell"></span><i></i></button>
           <button class="top-profile" data-view="account"><span class="avatar avatar-purple">AS</span><span class="top-profile-copy"><strong>Andi Saputra</strong><small>CMO</small></span><span class="chevron">⌄</span></button>
