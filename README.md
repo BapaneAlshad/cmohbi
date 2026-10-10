@@ -1,29 +1,66 @@
 # Ngapaya — Marketing OS
 
-Prototype frontend berdasarkan PRD HBI Marketing Dashboard dengan visual Modern Minimalist SaaS Dashboard dan subtle Soft UI.
+Ngapaya adalah dashboard manajemen tim marketing dan analitik sosial media untuk HBI. Aplikasi menggunakan Modern Minimalist SaaS UI dengan subtle Soft UI, mobile drawer, dark mode, dan komponen yang modular.
 
-## Design system
+## Stack
 
-- Inter sebagai tipografi utama dengan hierarchy yang ringkas dan mudah dibaca.
-- Surface putih, background netral, border tipis, radius 8–12px, dan shadow berlapis yang sangat halus.
-- Tombol utama hitam, outline icon konsisten, badge status pastel, serta dark mode dengan depth yang rendah.
-- Sidebar dapat diciutkan di desktop dan berubah menjadi drawer dengan backdrop di perangkat mobile.
-- Grid, kartu, kalender, kanban, tabel, modal, dan form responsif di berbagai ukuran layar.
+- Next.js 16 App Router, React 19, dan TypeScript strict.
+- Lucide React untuk sistem ikon yang konsisten.
+- Recharts untuk visualisasi analytics.
+- dnd-kit tersedia sebagai fondasi interaksi Kanban lanjutan.
+- Supabase Auth/PostgreSQL/Realtime/RLS sebagai backend produksi.
+- Repository demo berbasis localStorage sebagai fallback ketika Supabase belum dikonfigurasi.
+
+## Modul
+
+- Dashboard ringkasan campaign, pekerjaan tim, approval, dan KPI sosial.
+- Campaign dan Kanban To-Do dengan filter dan perubahan status.
+- Kalender konten Instagram, Facebook, dan TikTok.
+- Request & Ide, influencer/KOL, dan keuangan.
+- Analitik lintas platform, perbandingan reach, konten terbaik, rekomendasi tindakan, input manual, dan tombol sinkronisasi.
+- Akun, pengguna, dark mode, responsive sidebar/drawer, dan login demo.
 
 ## Menjalankan
 
-Buka index.html di browser, atau jalankan server tanpa dependency dengan perintah node preview-server.js. Untuk membuka dari HP satu jaringan, gunakan URL LAN yang dicetak server, misalnya http://192.168.0.108:4173.
+```bash
+npm install
+npm run dev
+```
 
-## Cakupan prototype
+Buka `http://localhost:4173`. Server memakai `0.0.0.0`, sehingga dapat dibuka dari HP pada jaringan yang sama menggunakan alamat IPv4 komputer, misalnya `http://192.168.0.108:4173`.
 
-- Dashboard: ringkasan hari ini, KPI sosial media, alert approval, progres campaign, dan agenda.
-- Campaign: daftar campaign dan modal pembuatan campaign dengan target/KPI.
-- To-Do: kanban 6 tahap, tambah task, filter gabungan brand/PIC/prioritas, dan update status.
-- Kalender Konten: kalender jadwal konten, momen relevan, serta modal penjadwalan.
-- Request & Ide: daftar request, modal request, dan Kotak Saran Marketing.
-- Mitra & Keuangan: influencer/KOL, transaksi, rekap biaya, dan ringkasan bulanan.
-- Analitik Sosmed: perbandingan metrik vs target, rekomendasi otomatis, dan konversi rekomendasi menjadi task.
-- Akun & Keamanan: profil, user list, akses fitur, ganti sandi mock, dan logout/login demo.
-- Toggle mode terang/gelap tersedia di topbar dan preferensinya tersimpan di browser.
+Pemeriksaan produksi:
 
-Data demo disimpan di localStorage agar perubahan state tetap terlihat setelah reload. Integrasi Supabase, Auth, Storage, API route, dan migrasi database belum diaktifkan pada prototype ini.
+```bash
+npm run typecheck
+npm run build
+npm audit --omit=dev
+```
+
+## Mode data
+
+Tanpa environment variable, aplikasi berjalan dalam **mode demo lokal**. Data perubahan tersimpan di browser dan bisa di-reset melalui modal input data sosial.
+
+Untuk mode produksi, salin `.env.example` menjadi `.env.local`, isi kredensial Supabase, kemudian jalankan migrasi:
+
+```text
+supabase/migrations/001_initial_schema.sql
+```
+
+Skema menyediakan profiles, workspaces, membership/roles, campaigns, tasks, social accounts, metric snapshots, dan social posts. Row Level Security aktif pada seluruh tabel utama.
+
+## Konektor sosial
+
+Fokus platform saat ini:
+
+- Instagram melalui Meta Graph API.
+- Facebook Page melalui Meta Graph API.
+- TikTok melalui TikTok Business API.
+
+Credential hanya dibaca oleh server melalui environment Vercel. Browser tidak menerima access token. `GET /api/social/status` memeriksa kesiapan konektor dan `POST /api/social/sync` menjadi pintu masuk antrean sinkronisasi. Pada mode demo endpoint tersebut tetap dapat digunakan tanpa credential.
+
+Worker/cron produksi dapat mengambil data dari provider, menyimpan snapshot ke Supabase, lalu memperbarui `last_sync_at`. Kolom `token_reference` pada database hanya menyimpan referensi secret—bukan raw access token.
+
+## Deployment Vercel
+
+Repository terdeteksi sebagai Next.js melalui `vercel.json`. Tambahkan environment variable dari `.env.example` pada Project Settings Vercel sebelum mengaktifkan konektor live.
