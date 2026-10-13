@@ -108,6 +108,13 @@ export async function POST(request: NextRequest) {
     }));
     const taskInsert = await admin.from("tasks").insert(tasks);
     if (taskInsert.error) return NextResponse.json({ error: taskInsert.error.message }, { status: 500 });
+
+    const bookingInsert = await admin.from("influencer_bookings").insert([
+      { id: crypto.randomUUID(), workspace_id: workspaceId, influencer_name: "Nadia Kuliner", platform: "instagram", campaign_id: campaignIds[0], content_title: "Reels menu spesial kemerdekaan", scheduled_at: "2026-10-12T19:00:00+07:00", status: "Terjadwal", rate: 8500000, spent: 4250000, payment_status: "DP dibayar", notes: "Final brief sudah dikirim", created_by: user.id },
+      { id: crypto.randomUUID(), workspace_id: workspaceId, influencer_name: "Arief Makan", platform: "tiktok", campaign_id: campaignIds[2], content_title: "Review paket weekend", scheduled_at: "2026-10-14T16:00:00+07:00", status: "Selesai", rate: 5500000, spent: 5500000, payment_status: "Lunas", notes: "Insight menunggu upload", created_by: user.id },
+      { id: crypto.randomUUID(), workspace_id: workspaceId, influencer_name: "Jalan-Jalan Yuk", platform: "facebook", campaign_id: campaignIds[1], content_title: "Video kunjungan outlet BSD", scheduled_at: "2026-10-18T12:00:00+07:00", status: "Draft", rate: 12000000, spent: 0, payment_status: "Belum dibayar", notes: "Menunggu konfirmasi jadwal", created_by: user.id },
+    ]);
+    if (bookingInsert.error && bookingInsert.error.code !== "42P01") return NextResponse.json({ error: bookingInsert.error.message }, { status: 500 });
   }
 
   return NextResponse.json({

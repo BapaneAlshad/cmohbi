@@ -106,6 +106,30 @@ export function PartnersView({ data, openModal }: CommonProps) {
   </>;
 }
 
+function influencerDate(value: string) {
+  return new Intl.DateTimeFormat("id-ID", { day: "2-digit", month: "short", year: "numeric" }).format(new Date(`${value}T00:00:00`));
+}
+
+export function InfluencerScheduleView({ data, openModal }: CommonProps) {
+  const schedules = [...data.influencerSchedules].sort((a, b) => `${a.date} ${a.time}`.localeCompare(`${b.date} ${b.time}`));
+  const totalRate = schedules.reduce((sum, item) => sum + item.rate, 0);
+  const totalSpent = schedules.reduce((sum, item) => sum + item.spent, 0);
+  const pendingSpent = totalRate - totalSpent;
+  const scheduledCount = schedules.filter((item) => item.status === "Terjadwal").length;
+  const spentByInfluencer = schedules.reduce<Record<string, number>>((result, item) => {
+    result[item.influencer] = (result[item.influencer] || 0) + item.spent;
+    return result;
+  }, {});
+  const topSpent = Object.entries(spentByInfluencer).sort(([, first], [, second]) => second - first).slice(0, 4);
+
+  return <><PageHeading kicker="Operasional / Influencer" title="Jadwal & spent influencer" description="Atur jadwal tayang kerja sama sekaligus pantau rate, realisasi, dan pembayaran selebgram." action={<PrimaryAction onClick={() => openModal("influencerSchedule")}>Jadwalkan influencer</PrimaryAction>} />
+    <section className="partner-summary influencer-summary"><div className="card summary-mini"><span>Total rate kerja sama</span><strong>{rupiah(totalRate)}</strong><p>{schedules.length} jadwal tercatat</p></div><div className="card summary-mini"><span>Total spent / realisasi</span><strong>{rupiah(totalSpent)}</strong><p className="trend-up">{totalRate ? `${Math.round((totalSpent / totalRate) * 100)}% dari total rate` : "Belum ada realisasi"}</p></div><div className="card summary-mini"><span>Sisa yang perlu diproses</span><strong>{rupiah(pendingSpent)}</strong><p className="trend-down">{scheduledCount} jadwal mendatang</p></div></section>
+    <div className="influencer-schedule-layout"><div className="card table-card"><div className="card-header"><div><h2 className="card-title">Jadwal kerja sama</h2><p className="card-subtitle">Konten, tanggal tayang, dan status pembayaran influencer</p></div><button className="link-button" onClick={() => openModal("influencerSchedule")}><Icon name="plus" size={14} />Tambah jadwal</button></div><div className="table-wrap"><table className="data-table influencer-schedule-table"><thead><tr><th>Tanggal</th><th>Influencer</th><th>Deliverable</th><th>Campaign</th><th>Rate</th><th>Spent</th><th>Status</th><th>Pembayaran</th></tr></thead><tbody>{schedules.map((item) => <tr key={item.id}><td><strong>{influencerDate(item.date)}</strong><small>{item.time} WIB</small></td><td><div className="table-person"><Avatar name={item.influencer} tone={item.platform === "TikTok" ? "orange" : item.platform === "Facebook" ? "green" : "purple"} /><div><strong>{item.influencer}</strong><small>{item.platform}</small></div></div></td><td>{item.content}</td><td>{item.campaign === "Tanpa campaign" ? "—" : item.campaign}</td><td>{rupiah(item.rate)}</td><td className={item.spent > 0 ? "trend-up" : "muted-cell"}>{rupiah(item.spent)}</td><td><StatusPill status={item.status} /></td><td><StatusPill status={item.paymentStatus} /></td></tr>)}</tbody></table></div></div>
+      <div className="card influencer-spent-card"><div className="card-header"><div><h2 className="card-title">Spent per influencer</h2><p className="card-subtitle">Akumulasi realisasi kerja sama</p></div><Icon name="wallet" size={16} /></div><div className="spent-list">{topSpent.map(([name, amount]) => { const percentage = totalSpent ? Math.round((amount / totalSpent) * 100) : 0; return <div className="spent-row" key={name}><div className="spent-row-head"><span>{name}</span><strong>{rupiah(amount)}</strong></div><div className="spent-progress"><span style={{ width: `${percentage}%` }} /></div><small>{percentage}% dari total spent</small></div>; })}</div><div className="spent-total"><span>Total spent</span><strong>{rupiah(totalSpent)}</strong></div></div>
+    </div>
+  </>;
+}
+
 const platformMeta: Record<SocialPlatform, { label: string; short: string; color: string }> = {
   instagram: { label: "Instagram", short: "IG", color: "#7469e8" },
   facebook: { label: "Facebook", short: "FB", color: "#4385d7" },

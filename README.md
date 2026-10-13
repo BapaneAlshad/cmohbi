@@ -17,6 +17,7 @@ Ngapaya adalah dashboard manajemen tim marketing dan analitik sosial media untuk
 - Campaign dan Kanban To-Do dengan filter dan perubahan status.
 - Kalender konten Instagram, Facebook, dan TikTok.
 - Request & Ide, influencer/KOL, dan keuangan.
+- Jadwal kerja sama influencer/selebgram dengan rate, spent/realisasi, status kerja sama, dan pembayaran.
 - Analitik lintas platform, perbandingan reach, konten terbaik, rekomendasi tindakan, input manual, dan tombol sinkronisasi.
 - Akun, pengguna, dark mode, responsive sidebar/drawer, dan Supabase Auth.
 
@@ -45,11 +46,12 @@ Untuk mode produksi, salin `.env.example` menjadi `.env.local`, isi kredensial S
 
 ```text
 supabase/migrations/001_initial_schema.sql
+supabase/migrations/002_influencer_bookings.sql
 ```
 
 Skema menyediakan profiles, workspaces, membership/roles, campaigns, tasks, social accounts, metric snapshots, dan social posts. Row Level Security aktif pada seluruh tabel utama.
 
-Di production, buka halaman **Buat akun** untuk mendaftarkan pengguna pertama. Setelah email dikonfirmasi (jika konfirmasi email aktif di Supabase), login akan otomatis membuat workspace HBI, profil pemilik, serta data campaign/task awal. Perubahan campaign dan task berikutnya tersinkron ke Supabase; modul lain masih memakai data demo sampai tabelnya diaktifkan pada fase berikutnya.
+Di production, buka halaman **Buat akun** untuk mendaftarkan pengguna pertama. Setelah email dikonfirmasi (jika konfirmasi email aktif di Supabase), login akan otomatis membuat workspace HBI, profil pemilik, serta data campaign/task awal. Perubahan campaign, task, dan jadwal influencer berikutnya tersinkron ke Supabase; modul lain masih memakai data demo sampai tabelnya diaktifkan pada fase berikutnya.
 
 ## Konektor sosial
 

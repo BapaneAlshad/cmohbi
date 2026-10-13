@@ -36,6 +36,11 @@ export const demoData: AppData = {
     { name: "Arief Makan", platform: "TikTok", niche: "Food Review", rate: 5500000, followers: "189K", engagement: "6.2%", status: "Aktif" },
     { name: "Jalan-Jalan Yuk", platform: "Facebook", niche: "Travel & Family", rate: 12000000, followers: "520K", engagement: "3.9%", status: "Review" },
   ],
+  influencerSchedules: [
+    { id: "kol-1", influencer: "Nadia Kuliner", platform: "Instagram", campaign: "Meriahkan Kemerdekaan", content: "Reels menu spesial kemerdekaan", date: "2026-10-12", time: "19:00", status: "Terjadwal", rate: 8500000, spent: 4250000, paymentStatus: "DP dibayar", notes: "Final brief sudah dikirim" },
+    { id: "kol-2", influencer: "Arief Makan", platform: "TikTok", campaign: "Weekend Treats", content: "Review paket weekend", date: "2026-10-14", time: "16:00", status: "Selesai", rate: 5500000, spent: 5500000, paymentStatus: "Lunas", notes: "Insight menunggu upload" },
+    { id: "kol-3", influencer: "Jalan-Jalan Yuk", platform: "Facebook", campaign: "Grand Opening BSD", content: "Video kunjungan outlet BSD", date: "2026-10-18", time: "12:00", status: "Draft", rate: 12000000, spent: 0, paymentStatus: "Belum dibayar", notes: "Menunggu konfirmasi jadwal" },
+  ],
   transactions: [
     { category: "KOL & Influencer", vendor: "Nadia Kuliner", date: "08 Agu 2026", amount: 8500000, type: "Realisasi", status: "Sudah Dibayar", brand: "HBI" },
     { category: "Digital Ads", vendor: "Meta Ads", date: "07 Agu 2026", amount: 4200000, type: "Realisasi", status: "Sudah Dibayar", brand: "HokBen" },

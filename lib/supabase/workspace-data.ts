@@ -26,16 +26,21 @@ function formatPeriod(start: string | null, end: string | null) {
   return `${formatDate(start)} — ${formatDate(end)}`;
 }
 
+function isMissingBookingsTable(error: { code?: string; message?: string } | null) {
+  return error?.code === "42P01" || error?.message?.includes("influencer_bookings");
+}
+
 export async function loadWorkspaceData(
   client: SupabaseClient,
   workspaceId: string,
   fallback: AppData,
   currentUserEmail: string,
 ): Promise<AppData> {
-  const [campaignResult, taskResult, memberResult] = await Promise.all([
+  const [campaignResult, taskResult, memberResult, bookingResult] = await Promise.all([
     client.from("campaigns").select("*").eq("workspace_id", workspaceId).order("created_at", { ascending: false }),
     client.from("tasks").select("*").eq("workspace_id", workspaceId).order("created_at", { ascending: true }),
     client.from("workspace_members").select("user_id, role").eq("workspace_id", workspaceId),
+    client.from("influencer_bookings").select("*").eq("workspace_id", workspaceId).order("scheduled_at", { ascending: true }),
   ]);
 
   const firstError = campaignResult.error || taskResult.error || memberResult.error;
@@ -80,6 +85,22 @@ export async function loadWorkspaceData(
       status: taskStatusFromDatabase[task.status] ?? "Backlog",
       campaign: task.campaign_id,
     })),
+    influencerSchedules: bookingResult.error && isMissingBookingsTable(bookingResult.error)
+      ? fallback.influencerSchedules
+      : (bookingResult.data ?? []).map((booking) => ({
+        id: booking.id,
+        influencer: booking.influencer_name,
+        platform: booking.platform === "instagram" ? "Instagram" : booking.platform === "facebook" ? "Facebook" : "TikTok",
+        campaign: campaignById.get(booking.campaign_id)?.name ?? "Tanpa campaign",
+        content: booking.content_title,
+        date: String(booking.scheduled_at).slice(0, 10),
+        time: String(booking.scheduled_at).slice(11, 16),
+        status: booking.status,
+        rate: Number(booking.rate),
+        spent: Number(booking.spent),
+        paymentStatus: booking.payment_status,
+        notes: booking.notes || undefined,
+      })),
     users: (memberResult.data ?? []).map((member, index) => {
       const profile = profileById.get(member.user_id);
       return {
@@ -129,11 +150,32 @@ export async function saveWorkspaceData(
       updated_at: new Date().toISOString(),
     }));
 
+  const campaignIdByName = new Map(data.campaigns.map((campaign) => [campaign.name, campaign.id]));
+  const influencerSchedules = data.influencerSchedules
+    .filter((schedule) => typeof schedule.id === "string")
+    .map((schedule) => ({
+      id: schedule.id,
+      workspace_id: workspaceId,
+      influencer_name: schedule.influencer,
+      platform: schedule.platform.toLowerCase(),
+      campaign_id: typeof campaignIdByName.get(schedule.campaign) === "string" ? campaignIdByName.get(schedule.campaign) : null,
+      content_title: schedule.content,
+      scheduled_at: `${schedule.date}T${schedule.time || "00:00"}:00+07:00`,
+      status: schedule.status,
+      rate: schedule.rate,
+      spent: schedule.spent,
+      payment_status: schedule.paymentStatus,
+      notes: schedule.notes || null,
+      created_by: userId,
+      updated_at: new Date().toISOString(),
+    }));
+
   const results = await Promise.all([
     campaigns.length ? client.from("campaigns").upsert(campaigns, { onConflict: "id" }) : Promise.resolve({ error: null }),
     tasks.length ? client.from("tasks").upsert(tasks, { onConflict: "id" }) : Promise.resolve({ error: null }),
+    influencerSchedules.length ? client.from("influencer_bookings").upsert(influencerSchedules, { onConflict: "id" }) : Promise.resolve({ error: null }),
   ]);
 
-  const error = results.find((result) => result.error)?.error;
+  const error = results.map((result) => result.error).find((result) => result && !isMissingBookingsTable(result)) ?? null;
   if (error) throw error;
 }

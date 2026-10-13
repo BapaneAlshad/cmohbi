@@ -395,6 +395,19 @@ body.sidebar-collapsed .user-mini { justify-content: center; padding-inline: 0; 
 .summary-mini span { color: var(--muted); font-size: 9px; }
 .summary-mini strong { margin-top: 8px; font-size: 19px; font-weight: 700; letter-spacing: -.035em; }
 .summary-mini p { margin: 6px 0 0; color: var(--green); font-size: 9px; }
+.influencer-schedule-layout { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(280px, .45fr); gap: 18px; }
+.influencer-schedule-table { min-width: 850px; }
+.influencer-schedule-table td small { white-space: nowrap; }
+.muted-cell { color: var(--muted); }
+.influencer-spent-card { min-width: 0; }
+.spent-list { display: flex; flex-direction: column; gap: 17px; }
+.spent-row-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: var(--muted-dark); font-size: 10px; }
+.spent-row-head strong { color: var(--ink); font-size: 11px; }
+.spent-progress { height: 6px; overflow: hidden; margin-top: 8px; background: var(--surface-muted); border-radius: 99px; }
+.spent-progress span { display: block; height: 100%; background: var(--purple); border-radius: inherit; transition: width var(--ease); }
+.spent-row small { display: block; margin-top: 5px; color: var(--muted); font-size: 8px; }
+.spent-total { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding-top: 16px; margin-top: 20px; border-top: 1px solid var(--line); color: var(--muted); font-size: 10px; }
+.spent-total strong { color: var(--ink); font-size: 16px; }
 .finance-layout { display: grid; grid-template-columns: minmax(0, .8fr) minmax(0, 1.2fr); gap: 18px; }
 .donut-wrap { display: flex; align-items: center; gap: 20px; padding: 16px 0; }
 .donut { width: 126px; height: 126px; display: grid; place-items: center; flex: 0 0 auto; background: conic-gradient(var(--ink) 0 48%, #9690e5 48% 79%, #d8b661 79% 91%, var(--surface-muted) 91% 100%); border-radius: 50%; }
@@ -548,7 +561,7 @@ body.dark-mode .platform-logo.tiktok, body.dark-mode .platform-badge.tiktok { ba
   .topbar { padding-inline: 22px; }
   .page-content { padding: 28px 22px 48px; }
   .stats-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .dashboard-grid, .dashboard-bottom, .calendar-layout, .request-layout, .finance-layout, .analytics-grid, .account-grid { grid-template-columns: 1fr; }
+  .dashboard-grid, .dashboard-bottom, .calendar-layout, .request-layout, .finance-layout, .analytics-grid, .account-grid, .influencer-schedule-layout { grid-template-columns: 1fr; }
   .campaign-grid { grid-template-columns: 1fr; }
   .social-account-grid { grid-template-columns: 1fr; }
 }
