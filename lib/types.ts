@@ -1,9 +1,10 @@
 export type ViewName = "dashboard" | "campaigns" | "todo" | "calendar" | "requests" | "partners" | "analytics" | "account";
 export type SocialPlatform = "instagram" | "facebook" | "tiktok";
 export type TaskStatus = "Backlog" | "To Do" | "In Progress" | "Review" | "Revisi" | "Done";
+export type EntityId = number | string;
 
-export interface Campaign { id: number; name: string; brand: string; pic: string; period: string; status: string; progress: number; budget: number; spent: number; kpi: string; tasks: number; content: number }
-export interface Task { id: number; title: string; brand: string; pic: string; due: string; priority: string; status: TaskStatus; campaign: number | null }
+export interface Campaign { id: EntityId; name: string; brand: string; pic: string; period: string; status: string; progress: number; budget: number; spent: number; kpi: string; tasks: number; content: number }
+export interface Task { id: EntityId; title: string; brand: string; pic: string; due: string; dueDate?: string; priority: string; status: TaskStatus; campaign: EntityId | null }
 export interface ContentItem { id: number; title: string; date: number; status: string; brand: string; platform: "Instagram" | "Facebook" | "TikTok" }
 export interface RequestItem { id: number; title: string; sender: string; date: string; brand: string; priority: string; status: string; pic?: string; icon: string }
 export interface Influencer { name: string; platform: "Instagram" | "Facebook" | "TikTok"; niche: string; rate: number; followers: string; engagement: string; status: string }

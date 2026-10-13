@@ -1,9 +1,11 @@
 "use client";
 
-import { FormEvent, useEffect, useRef, useState } from "react";
+import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import type { AppData, ContentItem, Influencer, Task, Transaction, User, ViewName } from "@/lib/types";
 import { demoData } from "@/lib/demo-data";
 import { loadLocalData, resetLocalData, saveLocalData } from "@/lib/storage";
+import { createSupabaseBrowserClient, isSupabaseConfigured } from "@/lib/supabase/client";
+import { loadWorkspaceData, saveWorkspaceData } from "@/lib/supabase/workspace-data";
 import { AccountView, AnalyticsView, CalendarView, CampaignsView, DashboardView, PartnersView, RequestsView, TodoView } from "./views";
 import { Avatar, Icon } from "./ui";
 
@@ -28,19 +30,79 @@ export function AppShell() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [modal, setModal] = useState<string | null>(null);
   const [toast, setToast] = useState("");
-  const [loggedIn, setLoggedIn] = useState(true);
+  const [authMode, setAuthMode] = useState<"loading" | "signed-out" | "demo" | "live">("loading");
+  const [identity, setIdentity] = useState({ name: "Andi Saputra", email: "andi@hbi.co.id" });
+  const [liveContext, setLiveContext] = useState<{ workspaceId: string; userId: string } | null>(null);
+  const [supabase] = useState(() => createSupabaseBrowserClient());
   const hydrated = useRef(false);
 
-  useEffect(() => {
-    setData(loadLocalData());
-    setTheme(window.localStorage.getItem("ngapaya-theme") === "dark" ? "dark" : "light");
-    setCollapsed(window.localStorage.getItem("ngapaya-sidebar-collapsed") === "true");
+  const connectLiveWorkspace = useCallback(async (accessToken: string, userId: string, email: string) => {
+    if (!supabase) throw new Error("Koneksi Supabase belum tersedia.");
+    const response = await fetch("/api/bootstrap", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    const result = await response.json() as { workspaceId?: string; profile?: { name: string; email: string }; error?: string };
+    if (!response.ok || !result.workspaceId) throw new Error(result.error || "Workspace gagal disiapkan.");
+
+    const liveData = await loadWorkspaceData(supabase, result.workspaceId, structuredClone(demoData), email);
+    setIdentity({ name: result.profile?.name || email.split("@")[0], email: result.profile?.email || email });
+    setData(liveData);
+    setLiveContext({ workspaceId: result.workspaceId, userId });
     hydrated.current = true;
-  }, []);
+    setAuthMode("live");
+  }, [supabase]);
 
   useEffect(() => {
-    if (hydrated.current) saveLocalData(data);
-  }, [data]);
+    setTheme(window.localStorage.getItem("ngapaya-theme") === "dark" ? "dark" : "light");
+    setCollapsed(window.localStorage.getItem("ngapaya-sidebar-collapsed") === "true");
+
+    if (!supabase) {
+      setData(loadLocalData());
+      hydrated.current = true;
+      setAuthMode("demo");
+      return;
+    }
+
+    let active = true;
+    void (async () => {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const { data: userData } = await supabase.auth.getUser();
+      if (!active) return;
+      if (!sessionData.session || !userData.user) {
+        setAuthMode("signed-out");
+        return;
+      }
+      try {
+        await connectLiveWorkspace(sessionData.session.access_token, userData.user.id, userData.user.email || "");
+      } catch (error) {
+        setToast(error instanceof Error ? error.message : "Supabase gagal dimuat.");
+        setAuthMode("signed-out");
+      }
+    })();
+
+    const { data: listener } = supabase.auth.onAuthStateChange((event) => {
+      if (event === "SIGNED_OUT") {
+        setLiveContext(null);
+        setAuthMode("signed-out");
+      }
+    });
+    return () => { active = false; listener.subscription.unsubscribe(); };
+  }, [connectLiveWorkspace, supabase]);
+
+  useEffect(() => {
+    if (!hydrated.current) return;
+    if (authMode === "demo") saveLocalData(data);
+    if (authMode !== "live" || !liveContext || !supabase) return;
+
+    const timer = window.setTimeout(() => {
+      void saveWorkspaceData(supabase, liveContext.workspaceId, liveContext.userId, data)
+        .catch((error) => {
+          setToast(error instanceof Error ? `Gagal menyimpan: ${error.message}` : "Gagal menyimpan ke Supabase.");
+        });
+    }, 700);
+    return () => window.clearTimeout(timer);
+  }, [authMode, data, liveContext, supabase]);
 
   useEffect(() => {
     document.body.classList.toggle("dark-mode", theme === "dark");
@@ -53,24 +115,56 @@ export function AppShell() {
   }, [collapsed]);
 
   const notify = (message: string) => {
-    if (message === "logout") { setLoggedIn(false); return; }
+    if (message === "logout") {
+      setLiveContext(null);
+      setAuthMode("signed-out");
+      if (supabase) void supabase.auth.signOut();
+      return;
+    }
     setToast(message);
     window.setTimeout(() => setToast(""), 2600);
   };
   const navigate = (target: string) => { setView(target as ViewName); setSidebarOpen(false); window.scrollTo({ top: 0, behavior: "smooth" }); };
-  const common = { data, openModal: setModal, navigate, notify, setData };
+  const common = { data, identity, openModal: setModal, navigate, notify, setData };
 
-  if (!loggedIn) return <LoginScreen onLogin={() => { setLoggedIn(true); notify("Selamat datang kembali, Andi."); }} />;
+  const authenticate = async (action: "login" | "signup", name: string, email: string, password: string) => {
+    if (!supabase) {
+      setAuthMode("demo");
+      return "Mode demo aktif. Data disimpan hanya di browser ini.";
+    }
+
+    if (action === "signup") {
+      const { data: signUpData, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: { data: { full_name: name } },
+      });
+      if (error) throw error;
+      if (!signUpData.session || !signUpData.user) return "Akun berhasil dibuat. Periksa email untuk konfirmasi, lalu masuk.";
+      setAuthMode("loading");
+      await connectLiveWorkspace(signUpData.session.access_token, signUpData.user.id, signUpData.user.email || email);
+      return;
+    }
+
+    const { data: signInData, error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) throw error;
+    if (!signInData.session || !signInData.user) throw new Error("Sesi login tidak berhasil dibuat.");
+    setAuthMode("loading");
+    await connectLiveWorkspace(signInData.session.access_token, signInData.user.id, signInData.user.email || email);
+  };
+
+  if (authMode === "loading") return <div className="login-screen auth-loading"><div className="brand-mark">N</div><strong>Menyiapkan workspace…</strong></div>;
+  if (authMode === "signed-out") return <LoginScreen configured={isSupabaseConfigured()} onAuthenticate={authenticate} />;
 
   return <div className="app-shell">
     <aside className={`sidebar ${sidebarOpen ? "open" : ""}`} id="sidebar">
       <div className="brand-wrap"><div className="brand-mark">N</div><div className="brand-copy"><div className="brand-name">ngapaya</div><div className="brand-subtitle">Marketing OS</div></div><button className="icon-button sidebar-collapse" onClick={() => setCollapsed(!collapsed)} aria-label="Ciutkan sidebar"><Icon name="panel" /></button><button className="icon-button close-sidebar" onClick={() => setSidebarOpen(false)} aria-label="Tutup menu"><Icon name="close" /></button></div>
       <div className="workspace-switcher soft-inset"><div className="workspace-avatar">H</div><div className="workspace-copy"><strong>HBI Marketing</strong><span>Workspace utama</span></div><span className="chevron">⌄</span></div>
       <nav className="main-nav" aria-label="Navigasi utama">{navigation.map((item) => <div key={item.view}>{item.group && <div className={`nav-label ${item.group !== "WORKSPACE" ? "nav-gap" : ""}`}>{item.group}</div>}<button className={`nav-item ${view === item.view ? "active" : ""}`} onClick={() => navigate(item.view)}><Icon className="nav-icon" name={item.icon} size={17} /><span>{item.label}</span>{item.count && <span className="nav-count">{item.count}</span>}</button></div>)}</nav>
-      <div className="sidebar-bottom"><div className="help-card"><div className="help-orb">?</div><div><strong>Butuh bantuan?</strong><span>Mode data: {process.env.NEXT_PUBLIC_SUPABASE_URL ? "Supabase" : "Demo lokal"}</span></div><span className="arrow">↗</span></div><div className="user-mini"><Avatar name="Andi Saputra" /><div className="user-mini-copy"><strong>Andi Saputra</strong><span>CMO · HBI</span></div><button className="icon-button" onClick={() => navigate("account")}><Icon name="more-horizontal" /></button></div></div>
+      <div className="sidebar-bottom"><div className="help-card"><div className="help-orb">?</div><div><strong>Butuh bantuan?</strong><span>Mode data: {authMode === "live" ? "Supabase" : "Demo lokal"}</span></div><span className="arrow">↗</span></div><div className="user-mini"><Avatar name={identity.name} /><div className="user-mini-copy"><strong>{identity.name}</strong><span>CMO · HBI</span></div><button className="icon-button" onClick={() => navigate("account")}><Icon name="more-horizontal" /></button></div></div>
     </aside>
     <button className={`sidebar-backdrop ${sidebarOpen ? "visible" : ""}`} onClick={() => setSidebarOpen(false)} aria-label="Tutup menu" />
-    <main className="main-area"><header className="topbar"><div className="topbar-left"><button className="icon-button menu-toggle" onClick={() => setSidebarOpen(true)} aria-label="Buka menu"><Icon name="menu" /></button><div className="crumbs"><span>Workspace</span><b>/</b><strong>{titles[view]}</strong></div></div><div className="topbar-actions"><label className="search-box"><Icon name="search" /><input type="search" placeholder="Cari apa saja..." aria-label="Cari di workspace" onKeyDown={(event) => { if (event.key === "Enter") notify(`Pencarian “${event.currentTarget.value}” siap digunakan.`); }} /></label><button className="icon-button theme-button" onClick={() => setTheme(theme === "dark" ? "light" : "dark")} aria-label="Ubah tema"><Icon name={theme === "dark" ? "sun" : "moon"} /></button><button className="icon-button notification-button" onClick={() => notify("Tidak ada notifikasi baru.")} aria-label="Notifikasi"><Icon name="bell" /><i /></button><button className="top-profile" onClick={() => navigate("account")}><Avatar name="Andi Saputra" /><span className="top-profile-copy"><strong>Andi Saputra</strong><small>CMO</small></span><span className="chevron">⌄</span></button></div></header>
+    <main className="main-area"><header className="topbar"><div className="topbar-left"><button className="icon-button menu-toggle" onClick={() => setSidebarOpen(true)} aria-label="Buka menu"><Icon name="menu" /></button><div className="crumbs"><span>Workspace</span><b>/</b><strong>{titles[view]}</strong></div></div><div className="topbar-actions"><label className="search-box"><Icon name="search" /><input type="search" placeholder="Cari apa saja..." aria-label="Cari di workspace" onKeyDown={(event) => { if (event.key === "Enter") notify(`Pencarian “${event.currentTarget.value}” siap digunakan.`); }} /></label><button className="icon-button theme-button" onClick={() => setTheme(theme === "dark" ? "light" : "dark")} aria-label="Ubah tema"><Icon name={theme === "dark" ? "sun" : "moon"} /></button><button className="icon-button notification-button" onClick={() => notify("Tidak ada notifikasi baru.")} aria-label="Notifikasi"><Icon name="bell" /><i /></button><button className="top-profile" onClick={() => navigate("account")}><Avatar name={identity.name} /><span className="top-profile-copy"><strong>{identity.name}</strong><small>CMO</small></span><span className="chevron">⌄</span></button></div></header>
       <div className="page-content">{view === "dashboard" && <DashboardView {...common} />}{view === "campaigns" && <CampaignsView {...common} />}{view === "todo" && <TodoView {...common} />}{view === "calendar" && <CalendarView {...common} />}{view === "requests" && <RequestsView {...common} />}{view === "partners" && <PartnersView {...common} />}{view === "analytics" && <AnalyticsView {...common} />}{view === "account" && <AccountView {...common} />}</div>
     </main>
     <div className={`toast ${toast ? "show" : ""}`}>{toast}</div>
@@ -78,8 +172,27 @@ export function AppShell() {
   </div>;
 }
 
-function LoginScreen({ onLogin }: { onLogin: () => void }) {
-  return <div className="login-screen" style={{ display: "grid" }}><div className="card login-card"><div className="brand-mark">N</div><h1>Selamat datang di Ngapaya</h1><p>Satu ruang kerja untuk seluruh kegiatan marketing HBI.<br />Masuk untuk melanjutkan pekerjaanmu.</p><form className="form-stack" onSubmit={(event) => { event.preventDefault(); onLogin(); }}><div className="form-field"><label>Email</label><input className="input" type="email" required defaultValue="andi@hbi.co.id" /></div><div className="form-field"><label>Kata sandi</label><input className="input" type="password" required defaultValue="ngapaya123" /></div><button className="button button-primary" type="submit">Masuk ke workspace ↗</button></form><div className="demo-hint">Mode demo · gunakan email dan kata sandi apa saja</div></div></div>;
+function LoginScreen({ configured, onAuthenticate }: { configured: boolean; onAuthenticate: (action: "login" | "signup", name: string, email: string, password: string) => Promise<string | void> }) {
+  const [action, setAction] = useState<"login" | "signup">("login");
+  const [pending, setPending] = useState(false);
+  const [message, setMessage] = useState("");
+
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setPending(true);
+    setMessage("");
+    const values = new FormData(event.currentTarget);
+    try {
+      const result = await onAuthenticate(action, String(values.get("name") || ""), String(values.get("email") || ""), String(values.get("password") || ""));
+      if (result) setMessage(result);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Autentikasi gagal. Silakan coba lagi.");
+    } finally {
+      setPending(false);
+    }
+  };
+
+  return <div className="login-screen" style={{ display: "grid" }}><div className="card login-card"><div className="brand-mark">N</div><h1>{action === "login" ? "Selamat datang kembali" : "Buat akun Ngapaya"}</h1><p>Satu ruang kerja untuk seluruh kegiatan marketing HBI.<br />{action === "login" ? "Masuk untuk melanjutkan pekerjaanmu." : "Akun pertama otomatis menjadi pemilik workspace."}</p><form className="form-stack" onSubmit={submit}>{action === "signup" && <div className="form-field"><label>Nama lengkap</label><input className="input" name="name" required autoComplete="name" /></div>}<div className="form-field"><label>Email</label><input className="input" name="email" type="email" required autoComplete="email" /></div><div className="form-field"><label>Kata sandi</label><input className="input" name="password" type="password" required minLength={8} autoComplete={action === "login" ? "current-password" : "new-password"} /></div><button className="button button-primary" type="submit" disabled={pending}>{pending ? "Memproses…" : action === "login" ? "Masuk ke workspace ↗" : "Buat akun ↗"}</button></form>{message && <div className="auth-message" role="status">{message}</div>}<button className="auth-switch" type="button" onClick={() => { setAction(action === "login" ? "signup" : "login"); setMessage(""); }}>{action === "login" ? "Belum punya akun? Buat akun" : "Sudah punya akun? Masuk"}</button><div className="demo-hint">{configured ? "Terhubung aman ke Supabase" : "Mode demo · gunakan email dan kata sandi apa saja"}</div></div></div>;
 }
 
 const modalInfo: Record<string, { title: string; description: string }> = {
@@ -128,8 +241,8 @@ const successMessages: Record<string, string> = { task: "Tugas baru berhasil dit
 
 function applyModal(type: string, values: Record<string, FormDataEntryValue>, current: AppData): AppData {
   const value = (key: string) => String(values[key] ?? "");
-  if (type === "task") { const task: Task = { id: Date.now(), title: value("title"), brand: value("brand"), pic: value("pic"), due: value("due"), priority: value("priority"), status: "Backlog", campaign: null }; return { ...current, tasks: [...current.tasks, task] }; }
-  if (type === "campaign") return { ...current, campaigns: [{ id: Date.now(), name: value("name"), brand: value("brand"), pic: value("pic"), period: "Oktober — November 2026", status: "Rencana", progress: 0, budget: Number(value("budget")), spent: 0, kpi: value("kpi"), tasks: 0, content: 0 }, ...current.campaigns] };
+  if (type === "task") { const task: Task = { id: globalThis.crypto.randomUUID(), title: value("title"), brand: value("brand"), pic: value("pic"), due: value("due"), dueDate: value("due"), priority: value("priority"), status: "Backlog", campaign: null }; return { ...current, tasks: [...current.tasks, task] }; }
+  if (type === "campaign") return { ...current, campaigns: [{ id: globalThis.crypto.randomUUID(), name: value("name"), brand: value("brand"), pic: value("pic"), period: "Oktober — November 2026", status: "Rencana", progress: 0, budget: Number(value("budget")), spent: 0, kpi: value("kpi"), tasks: 0, content: 0 }, ...current.campaigns] };
   if (type === "content") { const item: ContentItem = { id: Date.now(), title: value("title"), date: Number(value("date").slice(-2)), status: "Draf", brand: value("brand"), platform: value("platform") as ContentItem["platform"] }; return { ...current, content: [...current.content, item] }; }
   if (type === "request") return { ...current, requests: [{ id: Date.now(), title: value("title"), sender: value("sender"), date: "10 Okt 2026", brand: value("brand"), priority: value("priority"), status: "Baru", icon: "✦" }, ...current.requests] };
   if (type === "influencer") { const item: Influencer = { name: value("name"), platform: value("platform") as Influencer["platform"], niche: value("niche") || "Belum diisi", rate: Number(value("rate")), followers: value("followers") || "—", engagement: "—", status: "Review" }; return { ...current, influencers: [...current.influencers, item] }; }
