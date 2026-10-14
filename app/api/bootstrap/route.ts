@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { demoData } from "@/lib/demo-data";
+import { isValidUsername, normalizeUsername } from "@/lib/auth-identity";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
 export const dynamic = "force-dynamic";
@@ -26,18 +27,35 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Sesi login tidak valid atau sudah berakhir." }, { status: 401 });
   }
 
-  const fullName = String(user.user_metadata.full_name || user.user_metadata.name || user.email?.split("@")[0] || "Pengguna HBI");
-  const { error: profileError } = await admin.from("profiles").upsert({
+  const existingProfileResult = await admin
+    .from("profiles")
+    .select("full_name, username, email, whatsapp, job_title")
+    .eq("id", user.id)
+    .maybeSingle();
+  if (existingProfileResult.error) return NextResponse.json({ error: existingProfileResult.error.message }, { status: 500 });
+
+  const existingProfile = existingProfileResult.data;
+  const metadata = user.user_metadata || {};
+  const rawUsername = String(existingProfile?.username || metadata.username || user.email?.split("@")[0] || `user_${user.id.slice(0, 8)}`);
+  const username = normalizeUsername(rawUsername);
+  const fullName = String(existingProfile?.full_name || metadata.full_name || metadata.name || "Pengguna HBI");
+  const profileEmail = String(existingProfile?.email || metadata.email || "").trim().toLowerCase();
+  const whatsapp = String(existingProfile?.whatsapp || metadata.whatsapp || "").trim();
+  const profilePayload: Record<string, string> = {
     id: user.id,
+    username: isValidUsername(username) ? username : `user_${user.id.slice(0, 8)}`,
     full_name: fullName,
-    job_title: "CMO",
+    email: profileEmail,
+    whatsapp,
     updated_at: new Date().toISOString(),
-  });
+  };
+  if (!existingProfile) profilePayload.job_title = "CMO";
+  const { error: profileError } = await admin.from("profiles").upsert(profilePayload);
   if (profileError) return NextResponse.json({ error: profileError.message }, { status: 500 });
 
   const membershipResult = await admin
     .from("workspace_members")
-    .select("workspace_id")
+    .select("workspace_id, role")
     .eq("user_id", user.id)
     .limit(1)
     .maybeSingle();
@@ -119,6 +137,13 @@ export async function POST(request: NextRequest) {
 
   return NextResponse.json({
     workspaceId,
-    profile: { id: user.id, name: fullName, email: user.email || "" },
+    profile: {
+      id: user.id,
+      name: fullName,
+      username: profilePayload.username,
+      email: profileEmail,
+      whatsapp,
+      role: existingProfile?.job_title || membershipResult.data?.role || "member",
+    },
   });
 }

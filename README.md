@@ -51,7 +51,13 @@ supabase/migrations/002_influencer_bookings.sql
 
 Skema menyediakan profiles, workspaces, membership/roles, campaigns, tasks, social accounts, metric snapshots, dan social posts. Row Level Security aktif pada seluruh tabel utama.
 
-Di production, buka halaman **Buat akun** untuk mendaftarkan pengguna pertama. Setelah email dikonfirmasi (jika konfirmasi email aktif di Supabase), login akan otomatis membuat workspace HBI, profil pemilik, serta data campaign/task awal. Perubahan campaign, task, dan jadwal influencer berikutnya tersinkron ke Supabase; modul lain masih memakai data demo sampai tabelnya diaktifkan pada fase berikutnya.
+Di production, buka halaman **Buat akun** untuk mendaftarkan pengguna pertama dengan username, PIN, email profil, dan nomor WhatsApp. Login pertama akan otomatis membuat workspace HBI, profil pemilik, serta data campaign/task awal. Perubahan campaign, task, dan jadwal influencer berikutnya tersinkron ke Supabase; modul lain masih memakai data demo sampai tabelnya diaktifkan pada fase berikutnya. Endpoint pendaftaran dan reset PIN membutuhkan `SUPABASE_SECRET_KEY` (atau `SUPABASE_SERVICE_ROLE_KEY`) di environment server.
+
+### Login username & PIN
+
+Login aplikasi menggunakan **username dan PIN 6 angka**. Email dan nomor WhatsApp tetap disimpan sebagai informasi kontak pada profil, bukan sebagai identifier login. PIN dikelola oleh Supabase Auth dan tidak disimpan di tabel `profiles`.
+
+Jalankan migration `supabase/migrations/003_username_pin_auth.sql` setelah dua migration sebelumnya. Jika pengguna lupa PIN, Super Admin atau CMO dapat meresetnya dari halaman **Akun & keamanan**; tidak ada alur reset PIN mandiri melalui email.
 
 ## Konektor sosial
 

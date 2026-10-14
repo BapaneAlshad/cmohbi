@@ -10,7 +10,8 @@ export interface RequestItem { id: number; title: string; sender: string; date: 
 export interface Influencer { name: string; platform: "Instagram" | "Facebook" | "TikTok"; niche: string; rate: number; followers: string; engagement: string; status: string }
 export interface InfluencerSchedule { id: EntityId; influencer: string; platform: "Instagram" | "Facebook" | "TikTok"; campaign: string; content: string; date: string; time: string; status: string; rate: number; spent: number; paymentStatus: string; notes?: string }
 export interface Transaction { category: string; vendor: string; date: string; amount: number; type: string; status: string; brand: string }
-export interface User { name: string; email: string; role: string; status: string }
+export interface User { name: string; username: string; email: string; whatsapp: string; role: string; status: string }
+export interface UserIdentity { name: string; username: string; email: string; whatsapp: string; role: string }
 export interface Metric { current: number; previous: number; target: number; unit: "number" | "percent"; }
 export interface SocialAccount { id: string; platform: SocialPlatform; name: string; handle: string; status: "connected" | "needs_attention" | "disconnected"; lastSync: string | null; followers: number }
 export interface SocialSnapshot { platform: SocialPlatform; date: string; followers: number; reach: number; impressions: number; engagementRate: number; views: number }

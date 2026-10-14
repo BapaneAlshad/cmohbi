@@ -2,13 +2,14 @@
 
 import { useMemo, useState } from "react";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import type { AppData, EntityId, SocialPlatform, TaskStatus } from "@/lib/types";
+import type { AppData, EntityId, SocialPlatform, TaskStatus, UserIdentity } from "@/lib/types";
 import { Avatar, compact, Icon, PageHeading, PriorityPill, rupiah, StatusPill } from "./ui";
 
 type CommonProps = {
   data: AppData;
-  identity?: { name: string; email: string };
+  identity?: UserIdentity;
   openModal: (type: string) => void;
+  openResetPin?: (user: AppData["users"][number]) => void;
   navigate: (view: string) => void;
   notify: (message: string) => void;
   setData: React.Dispatch<React.SetStateAction<AppData>>;
@@ -164,10 +165,10 @@ export function AnalyticsView({ data, openModal, setData, notify }: CommonProps)
 function AnalyticsMetric({ label, value, change, icon }: { label: string; value: string; change: string; icon: string }) { return <div className="card analytics-metric"><div className="analytics-metric-top"><span>{label}</span><Icon name={icon} size={16} /></div><strong>{value}</strong><p className="trend-up">↗ {change} vs periode lalu</p><div className="target">Semua akun terpilih</div></div>; }
 function Recommendation({ title, text, onClick }: { title: string; text: string; onClick: () => void }) { return <div className="recommendation"><div className="recommendation-top"><strong>{title}</strong><PriorityPill priority="Tinggi" /></div><p>{text}</p><button className="button button-soft button-sm" onClick={onClick}>Jadikan tugas ↗</button></div>; }
 
-export function AccountView({ data, identity = { name: "Andi Saputra", email: "andi@hbi.co.id" }, openModal, notify }: CommonProps) {
+export function AccountView({ data, identity = { name: "Andi Saputra", username: "andi.saputra", email: "andi@hbi.co.id", whatsapp: "+6281212345678", role: "CMO" }, openModal, openResetPin, notify }: CommonProps) {
   const initials = identity.name.split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase();
   return <><PageHeading kicker="Akun / Keamanan" title="Akun & keamanan" description="Kelola profil, tim, dan akses fitur Ngapaya." action={<button className="button button-danger" onClick={() => notify("logout")}><Icon name="log-out" size={15} />Keluar</button>} />
-    <div className="account-grid"><div className="card profile-card"><div className="profile-avatar">{initials}</div><h2>{identity.name}</h2><div className="role">CMO · Full access</div><div className="profile-mail">{identity.email}</div><button className="button button-soft button-sm" onClick={() => openModal("profile")}>Edit profil</button><div className="profile-stat"><div><strong>{data.campaigns.length}</strong><span>Campaign</span></div><div><strong>{data.tasks.filter((task) => task.status === "Done").length}</strong><span>Task selesai</span></div></div><div className="profile-actions"><button className="button button-ghost button-sm" onClick={() => openModal("password")}>Ganti sandi</button></div></div>
-      <div className="card"><div className="card-header"><div><h2 className="card-title">Kelola pengguna</h2><p className="card-subtitle">Atur peran dan akses anggota tim.</p></div><button className="button button-primary button-sm" onClick={() => openModal("user")}><Icon name="plus" size={14} />Tambah user</button></div>{data.users.map((user, index) => <div className="permission-row" key={user.email}><div className="table-person"><Avatar name={user.name} tone={index === 1 ? "green" : "purple"} /><div className="permission-copy"><strong>{user.name}</strong><span>{user.email} · {user.role}</span></div></div><div className="table-person"><StatusPill status={user.status} /><Icon name="more-horizontal" size={15} /></div></div>)}</div></div>
+    <div className="account-grid"><div className="card profile-card"><div className="profile-avatar">{initials}</div><h2>{identity.name}</h2><div className="role">{identity.role} · Full access</div><div className="profile-mail">@{identity.username}<br />{identity.email}<br />{identity.whatsapp || "Nomor WhatsApp belum diisi"}</div><button className="button button-soft button-sm" onClick={() => openModal("profile")}>Edit profil</button><div className="profile-stat"><div><strong>{data.campaigns.length}</strong><span>Campaign</span></div><div><strong>{data.tasks.filter((task) => task.status === "Done").length}</strong><span>Task selesai</span></div></div><div className="profile-actions"><button className="button button-ghost button-sm" onClick={() => openModal("password")}>Ganti PIN</button></div></div>
+      <div className="card"><div className="card-header"><div><h2 className="card-title">Kelola pengguna</h2><p className="card-subtitle">Atur peran, akses, dan reset PIN anggota tim.</p></div><button className="button button-primary button-sm" onClick={() => openModal("user")}><Icon name="plus" size={14} />Tambah user</button></div>{data.users.map((user, index) => <div className="permission-row" key={user.username || user.email}><div className="table-person"><Avatar name={user.name} tone={index === 1 ? "green" : "purple"} /><div className="permission-copy"><strong>{user.name}</strong><span>@{user.username} · {user.email} · {user.role}</span></div></div><div className="table-person"><StatusPill status={user.status} />{openResetPin && user.username && <button className="link-button reset-pin-button" onClick={() => openResetPin(user)}>Reset PIN</button>}</div></div>)}</div></div>
   </>;
 }

@@ -47,10 +47,10 @@ export const demoData: AppData = {
     { category: "Produksi Konten", vendor: "Studio Kuning", date: "05 Agu 2026", amount: 3000000, type: "Rencana", status: "Belum Dibayar", brand: "HBI" },
   ],
   users: [
-    { name: "Andi Saputra", email: "andi@hbi.co.id", role: "CMO", status: "Aktif" },
-    { name: "Rani Putri", email: "rani@hbi.co.id", role: "Creative Designer", status: "Aktif" },
-    { name: "Dimas Arya", email: "dimas@hbi.co.id", role: "Support Marketing", status: "Aktif" },
-    { name: "Sinta Dewi", email: "sinta@hbi.co.id", role: "Tim Konten", status: "Aktif" },
+    { name: "Andi Saputra", username: "andi.saputra", email: "andi@hbi.co.id", whatsapp: "+6281212345678", role: "CMO", status: "Aktif" },
+    { name: "Rani Putri", username: "rani.putri", email: "rani@hbi.co.id", whatsapp: "+6281312345678", role: "Creative Designer", status: "Aktif" },
+    { name: "Dimas Arya", username: "dimas.arya", email: "dimas@hbi.co.id", whatsapp: "+6281412345678", role: "Support Marketing", status: "Aktif" },
+    { name: "Sinta Dewi", username: "sinta.dewi", email: "sinta@hbi.co.id", whatsapp: "+6281512345678", role: "Tim Konten", status: "Aktif" },
   ],
   socialAccounts: [
     { id: "ig-hbi", platform: "instagram", name: "HBI Indonesia", handle: "@hbi.indonesia", status: "connected", lastSync: "10 Okt 2026, 13:30", followers: 128400 },

@@ -48,7 +48,7 @@ export async function loadWorkspaceData(
 
   const memberIds = (memberResult.data ?? []).map((member) => member.user_id);
   const profileResult = memberIds.length
-    ? await client.from("profiles").select("id, full_name, job_title").in("id", memberIds)
+    ? await client.from("profiles").select("id, full_name, username, email, whatsapp, job_title").in("id", memberIds)
     : { data: [], error: null };
 
   if (profileResult.error) throw profileResult.error;
@@ -105,7 +105,9 @@ export async function loadWorkspaceData(
       const profile = profileById.get(member.user_id);
       return {
         name: profile?.full_name ?? "Anggota tim",
-        email: index === 0 ? currentUserEmail : "Email privat",
+        username: profile?.username ?? "",
+        email: profile?.email || (index === 0 ? currentUserEmail : "Email privat"),
+        whatsapp: profile?.whatsapp ?? "",
         role: profile?.job_title || member.role,
         status: "Aktif",
       };
