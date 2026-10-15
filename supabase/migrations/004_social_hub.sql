@@ -1,6 +1,11 @@
 alter type public.social_platform add value if not exists 'threads';
 
-create type public.social_inbox_kind as enum ('comment', 'message');
+do $$
+begin
+  create type public.social_inbox_kind as enum ('comment', 'message');
+exception
+  when duplicate_object then null;
+end $$;
 
 alter table public.social_accounts
   add column if not exists capabilities jsonb not null default '{}'::jsonb,
