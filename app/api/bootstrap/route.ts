@@ -10,6 +10,14 @@ function bearerToken(request: NextRequest) {
   return authorization?.startsWith("Bearer ") ? authorization.slice(7) : null;
 }
 
+function displayRole(jobTitle: string | null | undefined, membershipRole: string | null | undefined) {
+  if (jobTitle) return jobTitle;
+  if (membershipRole === "owner") return "Super Admin";
+  if (membershipRole === "admin") return "Admin";
+  if (membershipRole === "viewer") return "Viewer";
+  return "Member";
+}
+
 export async function POST(request: NextRequest) {
   const admin = createSupabaseAdminClient();
   const token = bearerToken(request);
@@ -143,7 +151,7 @@ export async function POST(request: NextRequest) {
       username: profilePayload.username,
       email: profileEmail,
       whatsapp,
-      role: existingProfile?.job_title || membershipResult.data?.role || "member",
+      role: displayRole(existingProfile?.job_title, membershipResult.data?.role),
     },
   });
 }

@@ -1,4 +1,5 @@
 import type { AppData } from "./types";
+import { demoAccount } from "./demo-account";
 
 export const demoData: AppData = {
   campaigns: [
@@ -47,7 +48,7 @@ export const demoData: AppData = {
     { category: "Produksi Konten", vendor: "Studio Kuning", date: "05 Agu 2026", amount: 3000000, type: "Rencana", status: "Belum Dibayar", brand: "HBI" },
   ],
   users: [
-    { name: "Andi Saputra", username: "andi.saputra", email: "andi@hbi.co.id", whatsapp: "+6281212345678", role: "CMO", status: "Aktif" },
+    { ...demoAccount, status: "Aktif" },
     { name: "Rani Putri", username: "rani.putri", email: "rani@hbi.co.id", whatsapp: "+6281312345678", role: "Creative Designer", status: "Aktif" },
     { name: "Dimas Arya", username: "dimas.arya", email: "dimas@hbi.co.id", whatsapp: "+6281412345678", role: "Support Marketing", status: "Aktif" },
     { name: "Sinta Dewi", username: "sinta.dewi", email: "sinta@hbi.co.id", whatsapp: "+6281512345678", role: "Tim Konten", status: "Aktif" },
@@ -55,6 +56,7 @@ export const demoData: AppData = {
   socialAccounts: [
     { id: "ig-hbi", platform: "instagram", name: "HBI Indonesia", handle: "@hbi.indonesia", status: "connected", lastSync: "10 Okt 2026, 13:30", followers: 128400 },
     { id: "fb-hbi", platform: "facebook", name: "HBI Indonesia", handle: "HBI Indonesia", status: "connected", lastSync: "10 Okt 2026, 13:30", followers: 84200 },
+    { id: "th-hbi", platform: "threads", name: "HBI Indonesia", handle: "@hbi.indonesia", status: "connected", lastSync: "10 Okt 2026, 13:30", followers: 36400 },
     { id: "tt-hbi", platform: "tiktok", name: "HBI Official", handle: "@hbiofficial", status: "needs_attention", lastSync: "09 Okt 2026, 20:15", followers: 96700 },
   ],
   socialSnapshots: [
@@ -67,10 +69,18 @@ export const demoData: AppData = {
     { platform: "instagram", date: "10 Okt", followers: 128400, reach: 246000, impressions: 348000, engagementRate: 5.1, views: 401000 },
     { platform: "facebook", date: "10 Okt", followers: 84200, reach: 106000, impressions: 169000, engagementRate: 3.1, views: 120000 },
     { platform: "tiktok", date: "10 Okt", followers: 96700, reach: 319000, impressions: 387000, engagementRate: 6.8, views: 521000 },
+    { platform: "threads", date: "10 Okt", followers: 36400, reach: 88000, impressions: 124000, engagementRate: 4.2, views: 0 },
   ],
   socialPosts: [
     { id: "p1", platform: "tiktok", title: "Behind the Scene Outlet BSD", publishedAt: "09 Okt 2026", reach: 187000, engagementRate: 8.4, status: "published" },
     { id: "p2", platform: "instagram", title: "Carousel Menu Baru HBI", publishedAt: "08 Okt 2026", reach: 142000, engagementRate: 6.1, status: "published" },
     { id: "p3", platform: "facebook", title: "Promo Keluarga Akhir Pekan", publishedAt: "07 Okt 2026", reach: 68000, engagementRate: 4.2, status: "published" },
+    { id: "p4", platform: "threads", title: "Cerita di balik campaign HBI", publishedAt: "06 Okt 2026", reach: 42000, engagementRate: 3.7, status: "published" },
+  ],
+  socialInbox: [
+    { id: "inbox-1", platform: "instagram", kind: "comment", author: "@kulineranaja", body: "Menunya bisa dipesan untuk delivery?", postTitle: "Carousel Menu Baru HBI", occurredAt: "10 Okt 2026, 14:22", status: "unread", canReply: true },
+    { id: "inbox-2", platform: "facebook", kind: "message", author: "Dewi Pratiwi", body: "Halo, boleh minta rate card kerja sama campaign?", occurredAt: "10 Okt 2026, 13:05", status: "open", canReply: true },
+    { id: "inbox-3", platform: "threads", kind: "comment", author: "@brandwatch.id", body: "Konsep visualnya menarik, ditunggu lanjutannya!", postTitle: "Cerita di balik campaign HBI", occurredAt: "10 Okt 2026, 11:40", status: "resolved", canReply: true },
+    { id: "inbox-4", platform: "tiktok", kind: "comment", author: "@foodiejakarta", body: "Lokasi outlet BSD di mana ya?", postTitle: "Behind the Scene Outlet BSD", occurredAt: "09 Okt 2026, 20:12", status: "unread", canReply: false },
   ],
 };

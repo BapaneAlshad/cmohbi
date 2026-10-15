@@ -13,6 +13,9 @@ type CommonProps = {
   navigate: (view: string) => void;
   notify: (message: string) => void;
   setData: React.Dispatch<React.SetStateAction<AppData>>;
+  getAccessToken?: () => Promise<string | null>;
+  refreshData?: () => Promise<void>;
+  liveMode?: boolean;
 };
 
 function PrimaryAction({ onClick, children }: { onClick: () => void; children: React.ReactNode }) {
@@ -23,7 +26,7 @@ function CampaignRow({ campaign }: { campaign: AppData["campaigns"][number] }) {
   return <div className="campaign-row"><div className="campaign-brand">{campaign.brand === "HBI" ? "H" : "HB"}</div><div className="campaign-copy"><strong>{campaign.name}</strong><span>{campaign.brand} · {campaign.status}</span></div><div className="campaign-progress-wrap"><div className="progress-track"><span style={{ width: `${campaign.progress}%` }} /></div><div className="progress-meta"><span>{campaign.progress}% selesai</span><span>{campaign.kpi}</span></div></div><div className="campaign-budget"><strong>{rupiah(campaign.budget - campaign.spent)}</strong><span>sisa budget</span></div></div>;
 }
 
-export function DashboardView({ data, navigate }: CommonProps) {
+export function DashboardView({ data, navigate, identity }: CommonProps) {
   const active = data.campaigns.filter((item) => item.status === "Berjalan").length;
   const pending = data.tasks.filter((item) => item.status !== "Done").length;
   const latest = latestByPlatform(data);
@@ -31,16 +34,16 @@ export function DashboardView({ data, navigate }: CommonProps) {
   const reach = Object.values(latest).reduce((sum, item) => sum + (item?.reach ?? 0), 0);
   const engagement = average(Object.values(latest).map((item) => item?.engagementRate ?? 0));
   return <>
-    <PageHeading kicker="Selamat pagi, Andi 👋" title="Mari wujudkan ide hari ini." description="Berikut ringkasan aktivitas marketing HBI untuk kamu." action={<span className="date-chip"><Icon name="calendar" size={14} />10 Oktober 2026</span>} />
+    <PageHeading kicker={`Selamat pagi, ${(identity?.name || "Andi").split(" ")[0]} 👋`} title="Mari wujudkan ide hari ini." description="Berikut ringkasan aktivitas marketing HBI untuk kamu." action={<span className="date-chip"><Icon name="calendar" size={14} />10 Oktober 2026</span>} />
     <section className="hero-panel"><div className="hero-copy"><div className="eyebrow">Ringkasan hari ini</div><h2>Tim kamu punya {pending} tugas yang perlu perhatian.</h2><p>Campaign, konten, dan performa sosial media tersaji dalam satu workspace.</p></div><div className="hero-illustration"><div className="hero-orb" /><div className="hero-person" /><div className="hero-board"><i /><i /><i /></div></div></section>
     <section className="stats-grid">
       <StatCard label="Campaign aktif" value={`${active} / ${data.campaigns.length}`} note="12% dari bulan lalu" progress={68} icon="campaign" />
       <StatCard label="Tugas tertunda" value={`${pending} tugas`} note="4 perlu perhatian" progress={42} icon="check-square" tone="orange" />
-      <StatCard label="Akun sosial" value="3 platform" note="2 tersinkron hari ini" progress={72} icon="users" tone="blue" />
+      <StatCard label="Akun sosial" value={`${data.socialAccounts.length} platform`} note="2 tersinkron hari ini" progress={72} icon="users" tone="blue" />
       <StatCard label="Butuh approval" value="3 item" note="2 item baru hari ini" progress={56} icon="alert" tone="coral" />
     </section>
     <section className="dashboard-grid">
-      <div className="card social-card"><div className="card-header"><div><h2 className="card-title">KPI Sosial Media</h2><p className="card-subtitle">Instagram, Facebook, dan TikTok</p></div><button className="link-button" onClick={() => navigate("analytics")}>Lihat analitik ↗</button></div>
+      <div className="card social-card"><div className="card-header"><div><h2 className="card-title">KPI Sosial Media</h2><p className="card-subtitle">Instagram, Facebook, Threads, dan TikTok</p></div><button className="link-button" onClick={() => navigate("analytics")}>Lihat analitik ↗</button></div>
         <MetricRow label="Followers" value={compact(followers)} target="320K" positive change="+4,8%" />
         <MetricRow label="Reach" value={compact(reach)} target="750K" positive change="+12,4%" />
         <MetricRow label="Engagement" value={`${engagement.toFixed(1)}%`} target="5%" positive={engagement >= 5} change={engagement >= 5 ? "+0,6%" : "-0,4%"} />
@@ -134,35 +137,44 @@ export function InfluencerScheduleView({ data, openModal }: CommonProps) {
 const platformMeta: Record<SocialPlatform, { label: string; short: string; color: string }> = {
   instagram: { label: "Instagram", short: "IG", color: "#7469e8" },
   facebook: { label: "Facebook", short: "FB", color: "#4385d7" },
+  threads: { label: "Threads", short: "TH", color: "#24262b" },
   tiktok: { label: "TikTok", short: "TT", color: "#24262b" },
 };
 
 function latestByPlatform(data: AppData) {
-  return (["instagram", "facebook", "tiktok"] as SocialPlatform[]).reduce((result, platform) => {
+  return (["instagram", "facebook", "threads", "tiktok"] as SocialPlatform[]).reduce((result, platform) => {
     result[platform] = [...data.socialSnapshots].reverse().find((item) => item.platform === platform);
     return result;
   }, {} as Record<SocialPlatform, AppData["socialSnapshots"][number] | undefined>);
 }
 function average(values: number[]) { return values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0; }
 
-export function AnalyticsView({ data, openModal, setData, notify }: CommonProps) {
+export function AnalyticsView({ data, openModal, setData, notify, getAccessToken, refreshData, liveMode }: CommonProps) {
   const [platform, setPlatform] = useState<"all" | SocialPlatform>("all");
   const [syncing, setSyncing] = useState(false);
   const latest = latestByPlatform(data);
   const selected = platform === "all" ? Object.values(latest).filter(Boolean) : [latest[platform]].filter(Boolean);
   const totals = { followers: selected.reduce((sum, item) => sum + (item?.followers ?? 0), 0), reach: selected.reduce((sum, item) => sum + (item?.reach ?? 0), 0), impressions: selected.reduce((sum, item) => sum + (item?.impressions ?? 0), 0), views: selected.reduce((sum, item) => sum + (item?.views ?? 0), 0), engagement: average(selected.map((item) => item?.engagementRate ?? 0)) };
-  const chartData = useMemo(() => ["05 Okt", "07 Okt", "10 Okt"].map((date) => { const row: Record<string, string | number> = { date }; for (const item of data.socialSnapshots.filter((snapshot) => snapshot.date === date)) row[item.platform] = item.reach; return row; }), [data.socialSnapshots]);
-  const sync = async () => { setSyncing(true); try { const response = await fetch("/api/social/sync", { method: "POST" }); const result = await response.json() as { mode?: string; message?: string }; notify(result.message ?? "Sinkronisasi selesai."); setData((current) => ({ ...current, socialAccounts: current.socialAccounts.map((account) => ({ ...account, lastSync: "Baru saja" })) })); } catch { notify("Sinkronisasi gagal. Periksa koneksi server."); } finally { setSyncing(false); } };
-  return <><PageHeading kicker="Operasional / Analitik Sosmed" title="Analitik sosial media" description="Pantau Instagram, Facebook, dan TikTok dari satu dashboard yang aman." action={<div className="heading-actions"><button className="button button-soft" onClick={() => openModal("metrics")}><Icon name="plus" size={15} />Isi data manual</button><button className="button button-primary" disabled={syncing} onClick={sync}><Icon name="download" size={15} />{syncing ? "Menyinkronkan..." : "Sinkronkan data"}</button></div>} />
-    <div className="social-platform-tabs"><button className={`platform-tab ${platform === "all" ? "active" : ""}`} onClick={() => setPlatform("all")}>Semua platform</button>{(["instagram", "facebook", "tiktok"] as SocialPlatform[]).map((item) => <button className={`platform-tab ${platform === item ? "active" : ""}`} onClick={() => setPlatform(item)} key={item}><span className={`platform-logo ${item}`}>{platformMeta[item].short}</span>{platformMeta[item].label}</button>)}</div>
+  const chartData = useMemo(() => {
+    const grouped = new Map<string, Record<string, string | number>>();
+    for (const snapshot of data.socialSnapshots) {
+      const row = grouped.get(snapshot.date) ?? { date: snapshot.date };
+      row[snapshot.platform] = snapshot.reach;
+      grouped.set(snapshot.date, row);
+    }
+    return Array.from(grouped.values()).slice(-14);
+  }, [data.socialSnapshots]);
+    const sync = async () => { setSyncing(true); try { const token = await getAccessToken?.(); const response = await fetch("/api/social/sync", { method: "POST", headers: token ? { Authorization: `Bearer ${token}` } : undefined }); const result = await response.json() as { mode?: string; message?: string; error?: string }; if (!response.ok) throw new Error(result.error || result.message || "Sinkronisasi gagal."); await refreshData?.(); notify(result.message ?? "Sinkronisasi selesai."); } catch (error) { notify(error instanceof Error ? error.message : "Sinkronisasi gagal. Periksa koneksi server."); } finally { setSyncing(false); } };
+  return <><PageHeading kicker="Operasional / Analitik Sosmed" title="Analitik sosial media" description="Pantau Instagram, Facebook, Threads, dan TikTok dari satu dashboard yang aman." action={<div className="heading-actions"><button className="button button-soft" onClick={() => openModal("metrics")}><Icon name="plus" size={15} />Isi data manual</button><button className="button button-primary" disabled={syncing} onClick={sync}><Icon name="download" size={15} />{syncing ? "Menyinkronkan..." : "Sinkronkan data"}</button></div>} />
+    <div className="social-platform-tabs"><button className={`platform-tab ${platform === "all" ? "active" : ""}`} onClick={() => setPlatform("all")}>Semua platform</button>{(["instagram", "facebook", "threads", "tiktok"] as SocialPlatform[]).map((item) => <button className={`platform-tab ${platform === item ? "active" : ""}`} onClick={() => setPlatform(item)} key={item}><span className={`platform-logo ${item}`}>{platformMeta[item].short}</span>{platformMeta[item].label}</button>)}</div>
     <div className="social-account-grid">{data.socialAccounts.map((account) => <article className="card social-account-card" key={account.id}><div className={`platform-logo large ${account.platform}`}>{platformMeta[account.platform].short}</div><div className="social-account-copy"><strong>{account.name}</strong><span>{account.handle}</span><small>Sinkron: {account.lastSync ?? "Belum pernah"}</small></div><div className="social-account-status"><StatusPill status={account.status === "connected" ? "Terhubung" : "Perlu perhatian"} /><strong>{compact(account.followers)}</strong><span>followers</span></div></article>)}</div>
-    <div className="analytics-metrics"><AnalyticsMetric label="Followers" value={compact(totals.followers)} change="+4,8%" icon="users" /><AnalyticsMetric label="Reach" value={compact(totals.reach)} change="+12,4%" icon="target" /><AnalyticsMetric label="Impressions" value={compact(totals.impressions)} change="+9,7%" icon="eye" /><AnalyticsMetric label="Engagement" value={`${totals.engagement.toFixed(1)}%`} change="+0,6%" icon="chart" /><AnalyticsMetric label="Video views" value={compact(totals.views)} change="+18,2%" icon="campaign" /></div>
-    <div className="analytics-grid"><div className="card analytics-chart-card"><div className="card-header"><div><h2 className="card-title">Perkembangan reach</h2><p className="card-subtitle">Perbandingan performa antar-platform</p></div><span className="goal-label goal-ok">Demo data</span></div><div className="chart-wrap"><ResponsiveContainer width="100%" height="100%"><AreaChart data={chartData}><defs>{Object.entries(platformMeta).map(([key, meta]) => <linearGradient id={`fill-${key}`} x1="0" y1="0" x2="0" y2="1" key={key}><stop offset="5%" stopColor={meta.color} stopOpacity={0.18} /><stop offset="95%" stopColor={meta.color} stopOpacity={0} /></linearGradient>)}</defs><CartesianGrid stroke="var(--line)" vertical={false} /><XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fill: "var(--muted)", fontSize: 9 }} /><YAxis axisLine={false} tickLine={false} tickFormatter={(value) => compact(value)} tick={{ fill: "var(--muted)", fontSize: 9 }} /><Tooltip contentStyle={{ background: "var(--surface)", border: "1px solid var(--line)", borderRadius: 8, fontSize: 10 }} />{Object.entries(platformMeta).map(([key, meta]) => <Area type="monotone" dataKey={key} stroke={meta.color} fill={`url(#fill-${key})`} strokeWidth={2} key={key} />)}</AreaChart></ResponsiveContainer></div></div>
+    <div className="analytics-metrics"><AnalyticsMetric label="Followers" value={compact(totals.followers)} change={liveMode ? "Dari provider" : "+4,8%"} icon="users" live={liveMode} /><AnalyticsMetric label="Reach" value={compact(totals.reach)} change={liveMode ? "Snapshot terbaru" : "+12,4%"} icon="target" live={liveMode} /><AnalyticsMetric label="Impressions" value={compact(totals.impressions)} change={liveMode ? "Snapshot terbaru" : "+9,7%"} icon="eye" live={liveMode} /><AnalyticsMetric label="Engagement" value={`${totals.engagement.toFixed(1)}%`} change={liveMode ? "Dihitung dari data" : "+0,6%"} icon="chart" live={liveMode} /><AnalyticsMetric label="Video views" value={compact(totals.views)} change={liveMode ? "Dari provider" : "+18,2%"} icon="campaign" live={liveMode} /></div>
+    <div className="analytics-grid"><div className="card analytics-chart-card"><div className="card-header"><div><h2 className="card-title">Perkembangan reach</h2><p className="card-subtitle">Perbandingan performa antar-platform</p></div><span className={`goal-label ${liveMode ? "goal-ok" : "goal-low"}`}>{liveMode ? "Live provider" : "Demo data"}</span></div><div className="chart-wrap"><ResponsiveContainer width="100%" height="100%"><AreaChart data={chartData}><defs>{Object.entries(platformMeta).map(([key, meta]) => <linearGradient id={`fill-${key}`} x1="0" y1="0" x2="0" y2="1" key={key}><stop offset="5%" stopColor={meta.color} stopOpacity={0.18} /><stop offset="95%" stopColor={meta.color} stopOpacity={0} /></linearGradient>)}</defs><CartesianGrid stroke="var(--line)" vertical={false} /><XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fill: "var(--muted)", fontSize: 9 }} /><YAxis axisLine={false} tickLine={false} tickFormatter={(value) => compact(value)} tick={{ fill: "var(--muted)", fontSize: 9 }} /><Tooltip contentStyle={{ background: "var(--surface)", border: "1px solid var(--line)", borderRadius: 8, fontSize: 10 }} />{Object.entries(platformMeta).map(([key, meta]) => <Area type="monotone" dataKey={key} stroke={meta.color} fill={`url(#fill-${key})`} strokeWidth={2} key={key} />)}</AreaChart></ResponsiveContainer></div></div>
       <div className="card"><div className="card-header"><div><h2 className="card-title">Rekomendasi tindakan</h2><p className="card-subtitle">Insight otomatis dari data terbaru</p></div><span className="goal-label goal-low">2 alert</span></div><div className="recommendation-list"><Recommendation title="TikTok perlu sinkron ulang" text="Perbarui token akses agar data video terbaru tetap masuk otomatis." onClick={() => notify("Pengaturan koneksi TikTok dibuka dalam mode konfigurasi.")} /><Recommendation title="Facebook tertinggal" text="Reach Facebook lebih rendah. Adaptasi tiga konten Instagram terbaik untuk format Facebook." onClick={() => { setData((current) => ({ ...current, tasks: [...current.tasks, { id: globalThis.crypto.randomUUID(), title: "Adaptasi konten terbaik untuk Facebook", brand: "HBI", pic: "Sinta Dewi", due: "14 Okt", priority: "Sedang", status: "To Do", campaign: null }] })); notify("Rekomendasi berhasil dijadikan tugas."); }} /></div></div></div>
     <div className="card social-content-table"><div className="card-header"><div><h2 className="card-title">Konten terbaik</h2><p className="card-subtitle">Diurutkan berdasarkan reach Oktober 2026</p></div></div><div className="table-wrap"><table className="data-table"><thead><tr><th>Konten</th><th>Platform</th><th>Tanggal</th><th>Reach</th><th>Engagement</th><th>Status</th></tr></thead><tbody>{data.socialPosts.filter((post) => platform === "all" || post.platform === platform).map((post) => <tr key={post.id}><td><strong>{post.title}</strong></td><td><span className={`platform-badge ${post.platform}`}>{platformMeta[post.platform].label}</span></td><td>{post.publishedAt}</td><td>{compact(post.reach)}</td><td className="trend-up">{post.engagementRate}%</td><td><StatusPill status="Tayang" /></td></tr>)}</tbody></table></div></div>
   </>;
 }
-function AnalyticsMetric({ label, value, change, icon }: { label: string; value: string; change: string; icon: string }) { return <div className="card analytics-metric"><div className="analytics-metric-top"><span>{label}</span><Icon name={icon} size={16} /></div><strong>{value}</strong><p className="trend-up">↗ {change} vs periode lalu</p><div className="target">Semua akun terpilih</div></div>; }
+function AnalyticsMetric({ label, value, change, icon, live }: { label: string; value: string; change: string; icon: string; live?: boolean }) { return <div className="card analytics-metric"><div className="analytics-metric-top"><span>{label}</span><Icon name={icon} size={16} /></div><strong>{value}</strong><p className={live ? "muted-cell" : "trend-up"}>{live ? change : `↗ ${change} vs periode lalu`}</p><div className="target">{live ? "Data sinkron provider" : "Semua akun terpilih"}</div></div>; }
 function Recommendation({ title, text, onClick }: { title: string; text: string; onClick: () => void }) { return <div className="recommendation"><div className="recommendation-top"><strong>{title}</strong><PriorityPill priority="Tinggi" /></div><p>{text}</p><button className="button button-soft button-sm" onClick={onClick}>Jadikan tugas ↗</button></div>; }
 
 export function AccountView({ data, identity = { name: "Andi Saputra", username: "andi.saputra", email: "andi@hbi.co.id", whatsapp: "+6281212345678", role: "CMO" }, openModal, openResetPin, notify }: CommonProps) {

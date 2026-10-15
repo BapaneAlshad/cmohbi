@@ -516,6 +516,7 @@ body.dark-mode .switch.on::after { background: #171717; border-color: #171717; }
 .platform-logo.large { width: 38px; height: 38px; border-radius: 10px; font-size: 10px; }
 .platform-logo.instagram, .platform-badge.instagram { background: #7469e8; }
 .platform-logo.facebook, .platform-badge.facebook { background: #4385d7; }
+.platform-logo.threads, .platform-badge.threads { background: #24262b; }
 .platform-logo.tiktok, .platform-badge.tiktok { background: #24262b; }
 .social-account-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-bottom: 18px; }
 .social-account-card { display: flex; align-items: center; gap: 11px; padding: 15px; }
@@ -527,6 +528,41 @@ body.dark-mode .switch.on::after { background: #171717; border-color: #171717; }
 .social-account-status { display: flex; align-items: flex-end; flex-direction: column; gap: 3px; }
 .social-account-status strong { margin-top: 5px; font-size: 14px; }
 .social-account-status > span:last-child { color: var(--muted); font-size: 7px; }
+.social-account-grid-four { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.social-connector-status-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 18px; }
+.social-connector-status { display: flex; flex-direction: column; gap: 8px; padding: 13px; }
+.social-connector-status > div { display: flex; align-items: center; gap: 8px; }
+.social-connector-status strong { font-size: 10px; }
+.social-connector-status small { min-height: 25px; color: var(--muted); font-size: 8px; line-height: 1.35; }
+.social-hub-tabs { margin-bottom: 18px; }
+.social-hub-compose { max-width: 980px; }
+.social-compose-form { display: flex; flex-direction: column; gap: 14px; }
+.social-compose-form .two-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.platform-check-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 9px; }
+.platform-check { display: flex; align-items: center; gap: 7px; padding: 10px; border: 1px solid var(--line); border-radius: 9px; color: var(--muted-dark); cursor: pointer; }
+.platform-check.selected { border-color: var(--accent); background: var(--surface-subtle); color: var(--ink); }
+.platform-check input { accent-color: var(--accent); }
+.platform-check strong { font-size: 10px; }
+.social-compose-footer { display: flex; justify-content: space-between; align-items: center; gap: 14px; padding-top: 4px; }
+.social-calendar-layout, .social-inbox-layout { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(280px, .6fr); gap: 18px; }
+.social-queue { display: flex; flex-direction: column; gap: 12px; }
+.social-queue-item { display: flex; align-items: center; gap: 9px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.social-queue-item:last-child { border-bottom: 0; }
+.social-queue-item > div:nth-child(2) { min-width: 0; flex: 1; }
+.social-queue-item strong, .social-queue-item span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.social-queue-item strong { font-size: 10px; }
+.social-queue-item span { margin-top: 3px; color: var(--muted); font-size: 8px; }
+.social-inbox-list { display: flex; flex-direction: column; }
+.social-inbox-item { display: flex; align-items: flex-start; gap: 10px; padding: 14px 0; border-bottom: 1px solid var(--line); }
+.social-inbox-item:last-child { border-bottom: 0; }
+.social-inbox-item.unread { margin-inline: -12px; padding-inline: 12px; background: var(--surface-subtle); border-radius: 9px; }
+.social-inbox-copy { min-width: 0; flex: 1; }
+.social-inbox-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.social-inbox-head strong { font-size: 11px; }
+.social-inbox-head span, .social-inbox-copy small { color: var(--muted); font-size: 8px; }
+.social-inbox-copy p { margin: 7px 0 4px; color: var(--muted-dark); font-size: 10px; line-height: 1.45; }
+.social-inbox-actions { display: flex; align-items: center; gap: 8px; margin-top: 9px; }
+.inbox-capability-card p { color: var(--muted-dark); font-size: 10px; line-height: 1.55; }
 .analytics-chart-card { min-width: 0; }
 .chart-wrap { width: 100%; height: 275px; margin-top: 5px; }
 .social-content-table { margin-top: 18px; }
@@ -565,7 +601,10 @@ body.dark-mode .platform-logo.tiktok, body.dark-mode .platform-badge.tiktok { ba
   .stats-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .dashboard-grid, .dashboard-bottom, .calendar-layout, .request-layout, .finance-layout, .analytics-grid, .account-grid, .influencer-schedule-layout { grid-template-columns: 1fr; }
   .campaign-grid { grid-template-columns: 1fr; }
-  .social-account-grid { grid-template-columns: 1fr; }
+  .social-account-grid, .social-account-grid-four, .social-connector-status-grid, .platform-check-grid { grid-template-columns: 1fr; }
+  .social-calendar-layout, .social-inbox-layout { grid-template-columns: 1fr; }
+  .social-compose-form .two-fields { grid-template-columns: 1fr; }
+  .social-compose-footer { align-items: stretch; flex-direction: column; }
 }
 
 @media (max-width: 680px) {

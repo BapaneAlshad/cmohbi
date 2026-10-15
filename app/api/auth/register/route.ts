@@ -48,7 +48,7 @@ export async function POST(request: NextRequest) {
     full_name: fullName,
     email,
     whatsapp,
-    job_title: (profileCount.count ?? 0) === 0 ? "CMO" : "Member",
+    job_title: (profileCount.count ?? 0) === 0 ? "Super Admin" : "Member",
   });
   if (profileError) {
     await admin.auth.admin.deleteUser(createdUser.user.id);
