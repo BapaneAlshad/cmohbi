@@ -7,10 +7,10 @@ export type EntityId = number | string;
 export interface Campaign { id: EntityId; name: string; brand: string; pic: string; period: string; status: string; progress: number; budget: number; spent: number; kpi: string; tasks: number; content: number }
 export interface Task { id: EntityId; title: string; brand: string; pic: string; due: string; dueDate?: string; priority: string; status: TaskStatus; campaign: EntityId | null }
 export interface ContentItem { id: number | string; title: string; date: number; status: string; brand: string; platform: "Instagram" | "Facebook" | "Threads" | "TikTok"; caption?: string; mediaUrl?: string; mediaType?: "feed" | "reel" | "video"; scheduledAt?: string }
-export interface RequestItem { id: number; title: string; sender: string; date: string; brand: string; priority: string; status: string; pic?: string; icon: string }
-export interface Influencer { name: string; platform: "Instagram" | "Facebook" | "TikTok"; niche: string; rate: number; followers: string; engagement: string; status: string }
+export interface RequestItem { id: EntityId; title: string; sender: string; date: string; brand: string; priority: string; status: string; pic?: string; icon: string }
+export interface Influencer { id?: EntityId; name: string; platform: "Instagram" | "Facebook" | "TikTok"; niche: string; rate: number; followers: string; engagement: string; status: string }
 export interface InfluencerSchedule { id: EntityId; influencer: string; platform: "Instagram" | "Facebook" | "TikTok"; campaign: string; content: string; date: string; time: string; status: string; rate: number; spent: number; paymentStatus: string; notes?: string }
-export interface Transaction { category: string; vendor: string; date: string; amount: number; type: string; status: string; brand: string }
+export interface Transaction { id?: EntityId; category: string; vendor: string; date: string; amount: number; type: string; status: string; brand: string }
 export interface User { name: string; username: string; email: string; whatsapp: string; role: string; status: string }
 export interface UserIdentity { name: string; username: string; email: string; whatsapp: string; role: string }
 export interface Metric { current: number; previous: number; target: number; unit: "number" | "percent"; }

@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { AppData, ContentItem, TaskStatus } from "@/lib/types";
+import type { AppData, ContentItem, EntityId, TaskStatus } from "@/lib/types";
 
 const taskStatusToDatabase: Record<TaskStatus, string> = {
   Backlog: "backlog",
@@ -34,13 +34,28 @@ function isMissingSocialHubTable(error: { code?: string; message?: string } | nu
   return error?.code === "42P01" || error?.message?.includes("social_inbox");
 }
 
+function isMissingOperationalTable(error: { code?: string; message?: string } | null) {
+  const message = error?.message?.toLowerCase() ?? "";
+  return error?.code === "42P01" || ["marketing_requests", "marketing_influencers", "marketing_transactions"].some((table) => message.includes(table));
+}
+
+function isUuid(value: EntityId | undefined): value is string {
+  return typeof value === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
+function normalizeDate(value: string) {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? new Date().toISOString().slice(0, 10) : parsed.toISOString().slice(0, 10);
+}
+
 export async function loadWorkspaceData(
   client: SupabaseClient,
   workspaceId: string,
   fallback: AppData,
   currentUserEmail: string,
 ): Promise<AppData> {
-  const [campaignResult, taskResult, memberResult, bookingResult, accountResult, metricResult, postResult, inboxResult] = await Promise.all([
+  const [campaignResult, taskResult, memberResult, bookingResult, accountResult, metricResult, postResult, inboxResult, requestResult, influencerResult, transactionResult] = await Promise.all([
     client.from("campaigns").select("*").eq("workspace_id", workspaceId).order("created_at", { ascending: false }),
     client.from("tasks").select("*").eq("workspace_id", workspaceId).order("created_at", { ascending: true }),
     client.from("workspace_members").select("user_id, role").eq("workspace_id", workspaceId),
@@ -49,6 +64,9 @@ export async function loadWorkspaceData(
     client.from("social_metric_snapshots").select("*").eq("workspace_id", workspaceId).order("captured_at", { ascending: true }),
     client.from("social_posts").select("*").eq("workspace_id", workspaceId).order("scheduled_at", { ascending: true }),
     client.from("social_inbox").select("*").eq("workspace_id", workspaceId).order("occurred_at", { ascending: false }),
+    client.from("marketing_requests").select("*").eq("workspace_id", workspaceId).order("request_date", { ascending: false }),
+    client.from("marketing_influencers").select("*").eq("workspace_id", workspaceId).order("created_at", { ascending: false }),
+    client.from("marketing_transactions").select("*").eq("workspace_id", workspaceId).order("transaction_date", { ascending: false }),
   ]);
 
   const firstError = campaignResult.error || taskResult.error || memberResult.error;
@@ -132,6 +150,37 @@ export async function loadWorkspaceData(
     status: item.status,
     canReply: item.can_reply,
   }));
+  const requests = requestResult.error ? fallback.requests : (requestResult.data ?? []).map((request) => ({
+    id: request.id,
+    title: request.title,
+    sender: request.sender,
+    date: String(request.request_date),
+    brand: request.brand,
+    priority: request.priority,
+    status: request.status,
+    pic: profileById.get(request.pic_id)?.full_name,
+    icon: request.icon || "✦",
+  }));
+  const influencers = influencerResult.error ? fallback.influencers : (influencerResult.data ?? []).map((influencer) => ({
+    id: influencer.id,
+    name: influencer.name,
+    platform: (influencer.platform === "facebook" ? "Facebook" : influencer.platform === "tiktok" ? "TikTok" : "Instagram") as AppData["influencers"][number]["platform"],
+    niche: influencer.niche || "Belum diisi",
+    rate: Number(influencer.rate),
+    followers: influencer.followers || "—",
+    engagement: influencer.engagement || "—",
+    status: influencer.status || "Review",
+  }));
+  const transactions = transactionResult.error ? fallback.transactions : (transactionResult.data ?? []).map((transaction) => ({
+    id: transaction.id,
+    category: transaction.category,
+    vendor: transaction.vendor,
+    date: String(transaction.transaction_date),
+    amount: Number(transaction.amount),
+    type: transaction.transaction_type,
+    status: transaction.status,
+    brand: transaction.brand,
+  }));
 
   return {
     ...fallback,
@@ -140,6 +189,9 @@ export async function loadWorkspaceData(
     socialSnapshots: metrics,
     socialPosts: posts,
     socialInbox: inbox,
+    requests,
+    influencers,
+    transactions,
     campaigns: campaignRows.map((campaign) => ({
       id: campaign.id,
       name: campaign.name,
@@ -201,6 +253,18 @@ export async function saveWorkspaceData(
   userId: string,
   data: AppData,
 ) {
+  const [existingCampaignResult, existingTaskResult, existingRequestResult] = await Promise.all([
+    client.from("campaigns").select("id, owner_id").eq("workspace_id", workspaceId),
+    client.from("tasks").select("id, assignee_id, created_by").eq("workspace_id", workspaceId),
+    client.from("marketing_requests").select("id, pic_id").eq("workspace_id", workspaceId),
+  ]);
+  if (existingCampaignResult.error) throw existingCampaignResult.error;
+  if (existingTaskResult.error) throw existingTaskResult.error;
+  if (existingRequestResult.error && !isMissingOperationalTable(existingRequestResult.error)) throw existingRequestResult.error;
+
+  const existingCampaignById = new Map((existingCampaignResult.data ?? []).map((campaign) => [campaign.id, campaign]));
+  const existingTaskById = new Map((existingTaskResult.data ?? []).map((task) => [task.id, task]));
+  const existingRequestById = new Map((existingRequestResult.data ?? []).map((request) => [request.id, request]));
   const campaigns = data.campaigns
     .filter((campaign) => typeof campaign.id === "string")
     .map((campaign) => ({
@@ -214,7 +278,7 @@ export async function saveWorkspaceData(
       spent: campaign.spent,
       status: campaign.status,
       progress: campaign.progress,
-      owner_id: userId,
+      owner_id: existingCampaignById.get(campaign.id)?.owner_id ?? userId,
     }));
 
   const tasks = data.tasks
@@ -227,8 +291,8 @@ export async function saveWorkspaceData(
       status: taskStatusToDatabase[task.status],
       priority: task.priority,
       due_date: task.dueDate || (/^\d{4}-\d{2}-\d{2}$/.test(task.due) ? task.due : null),
-      assignee_id: userId,
-      created_by: userId,
+      assignee_id: existingTaskById.get(task.id)?.assignee_id ?? userId,
+      created_by: existingTaskById.get(task.id)?.created_by ?? userId,
       updated_at: new Date().toISOString(),
     }));
 
@@ -275,6 +339,49 @@ export async function saveWorkspaceData(
       };
     })
     .filter((post): post is NonNullable<typeof post> => Boolean(post));
+  const requests = data.requests
+    .filter((request) => isUuid(request.id))
+    .map((request) => ({
+      id: request.id,
+      workspace_id: workspaceId,
+      title: request.title,
+      sender: request.sender,
+      request_date: normalizeDate(request.date),
+      brand: request.brand,
+      priority: request.priority,
+      status: request.status,
+      pic_id: existingRequestById.get(request.id)?.pic_id ?? null,
+      icon: request.icon,
+      updated_at: new Date().toISOString(),
+    }));
+  const influencers = data.influencers
+    .filter((influencer) => isUuid(influencer.id))
+    .map((influencer) => ({
+      id: influencer.id,
+      workspace_id: workspaceId,
+      name: influencer.name,
+      platform: influencer.platform.toLowerCase(),
+      niche: influencer.niche,
+      rate: influencer.rate,
+      followers: influencer.followers,
+      engagement: influencer.engagement,
+      status: influencer.status,
+      updated_at: new Date().toISOString(),
+    }));
+  const transactions = data.transactions
+    .filter((transaction) => isUuid(transaction.id))
+    .map((transaction) => ({
+      id: transaction.id,
+      workspace_id: workspaceId,
+      vendor: transaction.vendor,
+      category: transaction.category,
+      transaction_date: normalizeDate(transaction.date),
+      amount: transaction.amount,
+      transaction_type: transaction.type,
+      status: transaction.status,
+      brand: transaction.brand,
+      updated_at: new Date().toISOString(),
+    }));
   const socialInboxUpdates = data.socialInbox
     .filter((item) => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(item.id))
     .map((item) => client.from("social_inbox").update({ status: item.status, updated_at: new Date().toISOString() }).eq("id", item.id));
@@ -284,9 +391,12 @@ export async function saveWorkspaceData(
     tasks.length ? client.from("tasks").upsert(tasks, { onConflict: "id" }) : Promise.resolve({ error: null }),
     influencerSchedules.length ? client.from("influencer_bookings").upsert(influencerSchedules, { onConflict: "id" }) : Promise.resolve({ error: null }),
     socialPosts.length ? client.from("social_posts").upsert(socialPosts, { onConflict: "id" }) : Promise.resolve({ error: null }),
+    requests.length ? client.from("marketing_requests").upsert(requests, { onConflict: "id" }) : Promise.resolve({ error: null }),
+    influencers.length ? client.from("marketing_influencers").upsert(influencers, { onConflict: "id" }) : Promise.resolve({ error: null }),
+    transactions.length ? client.from("marketing_transactions").upsert(transactions, { onConflict: "id" }) : Promise.resolve({ error: null }),
   ]);
 
-  const error = results.map((result) => result.error).find((result) => result && !isMissingBookingsTable(result)) ?? null;
+  const error = results.map((result) => result.error).find((result) => result && !isMissingBookingsTable(result) && !isMissingOperationalTable(result)) ?? null;
   if (error) throw error;
   const inboxResults = await Promise.all(socialInboxUpdates);
   const inboxError = inboxResults.map((result) => result.error).find((result) => result && !isMissingSocialHubTable(result)) ?? null;
