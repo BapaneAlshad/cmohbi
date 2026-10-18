@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import type { AppData, EntityId, SocialPlatform, TaskStatus, UserIdentity } from "@/lib/types";
 import { Avatar, compact, Icon, PageHeading, PriorityPill, rupiah, StatusPill } from "./ui";
@@ -26,15 +26,27 @@ function CampaignRow({ campaign }: { campaign: AppData["campaigns"][number] }) {
   return <div className="campaign-row"><div className="campaign-brand">{campaign.brand === "HBI" ? "H" : "HB"}</div><div className="campaign-copy"><strong>{campaign.name}</strong><span>{campaign.brand} · {campaign.status}</span></div><div className="campaign-progress-wrap"><div className="progress-track"><span style={{ width: `${campaign.progress}%` }} /></div><div className="progress-meta"><span>{campaign.progress}% selesai</span><span>{campaign.kpi}</span></div></div><div className="campaign-budget"><strong>{rupiah(campaign.budget - campaign.spent)}</strong><span>sisa budget</span></div></div>;
 }
 
-export function DashboardView({ data, navigate, identity }: CommonProps) {
+export function DashboardView({ data, navigate }: CommonProps) {
+  const [today, setToday] = useState("Hari ini");
   const active = data.campaigns.filter((item) => item.status === "Berjalan").length;
   const pending = data.tasks.filter((item) => item.status !== "Done").length;
   const latest = latestByPlatform(data);
   const followers = Object.values(latest).reduce((sum, item) => sum + (item?.followers ?? 0), 0);
   const reach = Object.values(latest).reduce((sum, item) => sum + (item?.reach ?? 0), 0);
   const engagement = average(Object.values(latest).map((item) => item?.engagementRate ?? 0));
+  useEffect(() => {
+    const updateToday = () => setToday(new Intl.DateTimeFormat("id-ID", {
+      day: "2-digit",
+      month: "long",
+      year: "numeric",
+      timeZone: "Asia/Jakarta",
+    }).format(new Date()));
+    updateToday();
+    const interval = window.setInterval(updateToday, 60_000);
+    return () => window.clearInterval(interval);
+  }, []);
   return <>
-    <PageHeading kicker={`Selamat pagi, ${(identity?.name || "Andi").split(" ")[0]} 👋`} title="Mari wujudkan ide hari ini." description="Berikut ringkasan aktivitas marketing HBI untuk kamu." action={<span className="date-chip"><Icon name="calendar" size={14} />10 Oktober 2026</span>} />
+    <div className="dashboard-toolbar"><span className="date-chip"><Icon name="calendar" size={14} />{today}</span></div>
     <section className="hero-panel"><div className="hero-copy"><div className="eyebrow">Ringkasan hari ini</div><h2>Tim kamu punya {pending} tugas yang perlu perhatian.</h2><p>Campaign, konten, dan performa sosial media tersaji dalam satu workspace.</p></div><div className="hero-illustration"><div className="hero-orb" /><div className="hero-person" /><div className="hero-board"><i /><i /><i /></div></div></section>
     <section className="stats-grid">
       <StatCard label="Campaign aktif" value={`${active} / ${data.campaigns.length}`} note="12% dari bulan lalu" progress={68} icon="campaign" />

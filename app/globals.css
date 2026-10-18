@@ -162,6 +162,7 @@ body.sidebar-collapsed .user-mini { justify-content: center; padding-inline: 0; 
 /* Page foundations */
 .page-content { width: 100%; max-width: 1480px; padding: 32px 40px 56px; margin: 0 auto; }
 .page-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; margin-bottom: 26px; }
+.dashboard-toolbar { display: flex; justify-content: flex-end; margin-bottom: 16px; }
 .eyebrow { color: var(--muted); font-size: 9px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
 .page-heading h1 { margin: 8px 0 7px; font-size: clamp(24px, 2.2vw, 30px); font-weight: 700; letter-spacing: -.045em; line-height: 1.12; }
 .page-heading p { max-width: 680px; margin: 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
