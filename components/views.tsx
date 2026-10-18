@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import type { AppData, EntityId, SocialPlatform, TaskStatus, UserIdentity } from "@/lib/types";
 import { Avatar, compact, Icon, PageHeading, PriorityPill, rupiah, StatusPill } from "./ui";
+import { CampaignWorkspace } from "./campaign/campaign-workspace";
 
 type CommonProps = {
   data: AppData;
@@ -26,8 +27,20 @@ function CampaignRow({ campaign }: { campaign: AppData["campaigns"][number] }) {
   return <div className="campaign-row"><div className="campaign-brand">{campaign.brand === "HBI" ? "H" : "HB"}</div><div className="campaign-copy"><strong>{campaign.name}</strong><span>{campaign.brand} · {campaign.status}</span></div><div className="campaign-progress-wrap"><div className="progress-track"><span style={{ width: `${campaign.progress}%` }} /></div><div className="progress-meta"><span>{campaign.progress}% selesai</span><span>{campaign.kpi}</span></div></div><div className="campaign-budget"><strong>{rupiah(campaign.budget - campaign.spent)}</strong><span>sisa budget</span></div></div>;
 }
 
-export function DashboardView({ data, navigate }: CommonProps) {
-  const [today, setToday] = useState("Hari ini");
+function dashboardGreeting(date: Date) {
+  const hour = Number(new Intl.DateTimeFormat("en-US", { hour: "numeric", hourCycle: "h23", timeZone: "Asia/Jakarta" }).format(date));
+  if (hour < 11) return "Selamat pagi";
+  if (hour < 15) return "Selamat siang";
+  if (hour < 18) return "Selamat sore";
+  return "Selamat malam";
+}
+
+function dashboardDate(date: Date) {
+  return new Intl.DateTimeFormat("id-ID", { day: "2-digit", month: "long", year: "numeric", timeZone: "Asia/Jakarta" }).format(date);
+}
+
+export function DashboardView({ data, navigate, identity }: CommonProps) {
+  const [clock, setClock] = useState({ greeting: "Selamat pagi", date: "Hari ini" });
   const active = data.campaigns.filter((item) => item.status === "Berjalan").length;
   const pending = data.tasks.filter((item) => item.status !== "Done").length;
   const latest = latestByPlatform(data);
@@ -35,18 +48,17 @@ export function DashboardView({ data, navigate }: CommonProps) {
   const reach = Object.values(latest).reduce((sum, item) => sum + (item?.reach ?? 0), 0);
   const engagement = average(Object.values(latest).map((item) => item?.engagementRate ?? 0));
   useEffect(() => {
-    const updateToday = () => setToday(new Intl.DateTimeFormat("id-ID", {
-      day: "2-digit",
-      month: "long",
-      year: "numeric",
-      timeZone: "Asia/Jakarta",
-    }).format(new Date()));
-    updateToday();
-    const interval = window.setInterval(updateToday, 60_000);
+    const updateClock = () => {
+      const now = new Date();
+      setClock({ greeting: dashboardGreeting(now), date: dashboardDate(now) });
+    };
+    updateClock();
+    const interval = window.setInterval(updateClock, 60_000);
     return () => window.clearInterval(interval);
   }, []);
+  const accountName = identity?.name || "Andi";
   return <>
-    <div className="dashboard-toolbar"><span className="date-chip"><Icon name="calendar" size={14} />{today}</span></div>
+    <div className="dashboard-toolbar"><strong className="dashboard-greeting">{clock.greeting}, {accountName}</strong><span className="date-chip"><Icon name="calendar" size={14} />{clock.date}</span></div>
     <section className="hero-panel"><div className="hero-copy"><div className="eyebrow">Ringkasan hari ini</div><h2>Tim kamu punya {pending} tugas yang perlu perhatian.</h2><p>Campaign, konten, dan performa sosial media tersaji dalam satu workspace.</p></div><div className="hero-illustration"><div className="hero-orb" /><div className="hero-person" /><div className="hero-board"><i /><i /><i /></div></div></section>
     <section className="stats-grid">
       <StatCard label="Campaign aktif" value={`${active} / ${data.campaigns.length}`} note="12% dari bulan lalu" progress={68} icon="campaign" />
@@ -55,19 +67,12 @@ export function DashboardView({ data, navigate }: CommonProps) {
       <StatCard label="Butuh approval" value="3 item" note="2 item baru hari ini" progress={56} icon="alert" tone="coral" />
     </section>
     <section className="dashboard-grid">
+      <div className="card"><div className="card-header"><div><h2 className="card-title">Progres Campaign</h2><p className="card-subtitle">Campaign yang sedang berjalan</p></div><button className="link-button" onClick={() => navigate("campaigns")}>Kelola campaign ↗</button></div>{data.campaigns.slice(0, 3).map((campaign) => <CampaignRow campaign={campaign} key={campaign.id} />)}</div>
       <div className="card social-card"><div className="card-header"><div><h2 className="card-title">KPI Sosial Media</h2><p className="card-subtitle">Instagram, Facebook, Threads, dan TikTok</p></div><button className="link-button" onClick={() => navigate("analytics")}>Lihat analitik ↗</button></div>
         <MetricRow label="Followers" value={compact(followers)} target="320K" positive change="+4,8%" />
         <MetricRow label="Reach" value={compact(reach)} target="750K" positive change="+12,4%" />
         <MetricRow label="Engagement" value={`${engagement.toFixed(1)}%`} target="5%" positive={engagement >= 5} change={engagement >= 5 ? "+0,6%" : "-0,4%"} />
       </div>
-      <div className="card alert-card"><div className="card-header"><div><h2 className="card-title">Peringatan & Persetujuan</h2><p className="card-subtitle">Item yang perlu ditindaklanjuti</p></div><button className="link-button" onClick={() => navigate("requests")}>Lihat semua</button></div><div className="alert-list">
-        <AlertItem icon="wallet" title="Pengeluaran menunggu approval" sub={`Studio Kuning · ${rupiah(3000000)}`} time="10 mnt" />
-        <AlertItem icon="alert" title="TikTok perlu sinkron ulang" sub="Token akses akan segera kedaluwarsa" time="45 mnt" tone="coral" />
-        <AlertItem icon="check" title="Konten menunggu review" sub="Carousel: Rayakan Merdeka" time="2 jam" tone="blue" />
-      </div></div>
-    </section>
-    <section className="dashboard-bottom"><div className="card"><div className="card-header"><div><h2 className="card-title">Progres Campaign</h2><p className="card-subtitle">Campaign yang sedang berjalan</p></div><button className="link-button" onClick={() => navigate("campaigns")}>Kelola campaign ↗</button></div>{data.campaigns.slice(0, 3).map((campaign) => <CampaignRow campaign={campaign} key={campaign.id} />)}</div>
-      <div className="card"><div className="card-header"><div><h2 className="card-title">Agenda terdekat</h2><p className="card-subtitle">Jangan lewatkan momen penting</p></div><button className="link-button" onClick={() => navigate("calendar")}>Kalender ↗</button></div><div className="schedule-list"><Schedule day="12" title="Review konten Instagram" meta="Dengan CMO · 10:00 WIB" /><Schedule day="14" title="Posting Weekend Treats" meta="TikTok · 16:00 WIB" /><Schedule day="17" title="Brief influencer BSD" meta="Ruang Meeting 2 · 13:00 WIB" /></div></div>
     </section>
   </>;
 }
@@ -81,10 +86,23 @@ function displayDate(value: string) {
   return new Intl.DateTimeFormat("id-ID", { day: "2-digit", month: "short", year: "numeric" }).format(new Date(`${value}T00:00:00`));
 }
 
-export function CampaignsView({ data, openModal }: CommonProps) {
+export function CampaignsView({ data, identity, openModal, navigate, notify, setData }: CommonProps) {
+  const [selectedCampaignId, setSelectedCampaignId] = useState<EntityId | null>(null);
+  const [filters, setFilters] = useState({ status: "Semua", brand: "Semua" });
+  const selectedCampaign = selectedCampaignId === null ? undefined : data.campaigns.find((campaign) => String(campaign.id) === String(selectedCampaignId));
+  const statuses = ["Semua", ...Array.from(new Set(data.campaigns.map((campaign) => campaign.status)))];
+  const brands = ["Semua", ...Array.from(new Set(data.campaigns.map((campaign) => campaign.brand)))];
+  const filtered = data.campaigns.filter((campaign) => (filters.status === "Semua" || campaign.status === filters.status) && (filters.brand === "Semua" || campaign.brand === filters.brand));
+
+  if (selectedCampaignId !== null) return <CampaignWorkspace campaign={selectedCampaign} data={data} identity={identity} error={selectedCampaign ? undefined : "Campaign yang dipilih tidak lagi tersedia."} onBack={() => setSelectedCampaignId(null)} onNavigate={navigate} setData={setData} notify={notify} />;
+
   return <><PageHeading kicker="Workspace / Campaign" title="Kelola campaign" description="Pantau strategi, budget, dan progres semua campaign HBI." action={<PrimaryAction onClick={() => openModal("campaign")}>Buat campaign</PrimaryAction>} />
-    <div className="toolbar"><div className="toolbar-left"><span className="result-count">{data.campaigns.length} campaign ditemukan</span><button className="filter-chip">Semua status</button><button className="filter-chip">Semua brand</button></div></div>
-    <div className="campaign-grid">{data.campaigns.map((campaign) => <article className="card campaign-card" key={campaign.id}><div className="campaign-card-top"><div className="campaign-card-brand"><div className="campaign-brand">{campaign.brand === "HBI" ? "H" : "HB"}</div><div><h3>{campaign.name}</h3><div className="meta">{campaign.brand} · {campaign.period}</div></div></div><StatusPill status={campaign.status} /></div><div className="campaign-card-body"><div className="progress-track"><span style={{ width: `${campaign.progress}%` }} /></div><div className="progress-meta"><span>{campaign.progress}% selesai</span><span>{campaign.pic}</span></div><div className="campaign-kpis"><MiniKpi label="Budget" value={rupiah(campaign.budget)} /><MiniKpi label="Terpakai" value={rupiah(campaign.spent)} /><MiniKpi label="Task" value={`${campaign.tasks}`} /><MiniKpi label="Konten" value={`${campaign.content}`} /></div></div><div className="campaign-card-footer"><span className="due-label">Target: {campaign.kpi}</span><div className="people"><Avatar name={campaign.pic} /></div></div></article>)}</div>
+    <div className="toolbar"><div className="toolbar-left"><span className="result-count">{filtered.length} campaign ditemukan</span><FilterSelect value={filters.status} values={statuses} onChange={(status) => setFilters((current) => ({ ...current, status }))} /><FilterSelect value={filters.brand} values={brands} onChange={(brand) => setFilters((current) => ({ ...current, brand }))} /></div>{(filters.status !== "Semua" || filters.brand !== "Semua") && <button className="button button-soft button-sm" onClick={() => setFilters({ status: "Semua", brand: "Semua" })}>Reset filter</button>}</div>
+    {filtered.length ? <div className="campaign-grid">{filtered.map((campaign) => {
+      const taskCount = data.tasks.filter((task) => String(task.campaign) === String(campaign.id)).length;
+      const linkedContentCount = data.influencerSchedules.filter((schedule) => schedule.campaignId != null ? String(schedule.campaignId) === String(campaign.id) : schedule.campaign === campaign.name).length;
+      return <button type="button" className="card campaign-card campaign-card-button" key={campaign.id} onClick={() => setSelectedCampaignId(campaign.id)} aria-label={`Buka detail campaign ${campaign.name}`}><div className="campaign-card-top"><div className="campaign-card-brand"><div className="campaign-brand">{campaign.brand === "HBI" ? "H" : "HB"}</div><div><h3>{campaign.name}</h3><div className="meta">{campaign.brand} · {campaign.period}</div></div></div><StatusPill status={campaign.status} /></div><div className="campaign-card-body"><div className="progress-track"><span style={{ width: `${campaign.progress}%` }} /></div><div className="progress-meta"><span>{campaign.progress}% selesai</span><span>{campaign.pic}</span></div><div className="campaign-kpis"><MiniKpi label="Budget" value={rupiah(campaign.budget)} /><MiniKpi label="Terpakai" value={rupiah(campaign.spent)} /><MiniKpi label="Tugas aktual" value={`${taskCount}`} /><MiniKpi label="Konten/KOL terkait" value={`${linkedContentCount}`} /></div></div><div className="campaign-card-footer"><span className="due-label">Target: {campaign.kpi}</span><span className="campaign-open-label">Buka workspace <Icon name="arrow-right" size={12} /></span></div></button>;
+    })}</div> : <div className="card campaign-list-empty"><Icon name="campaign" size={20} /><strong>Campaign tidak ditemukan</strong><p>Ubah filter atau buat campaign baru untuk mulai bekerja.</p></div>}
   </>;
 }
 function MiniKpi({ label, value }: { label: string; value: string }) { return <div className="mini-kpi"><strong>{value}</strong><span>{label}</span></div>; }

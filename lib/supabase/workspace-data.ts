@@ -39,7 +39,7 @@ function isMissingOperationalTable(error: { code?: string; message?: string } | 
   return error?.code === "42P01" || ["marketing_requests", "marketing_influencers", "marketing_transactions"].some((table) => message.includes(table));
 }
 
-function isUuid(value: EntityId | undefined): value is string {
+function isUuid(value: EntityId | null | undefined): value is string {
   return typeof value === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }
 
@@ -224,6 +224,7 @@ export async function loadWorkspaceData(
         influencer: booking.influencer_name,
         platform: booking.platform === "instagram" ? "Instagram" : booking.platform === "facebook" ? "Facebook" : "TikTok",
         campaign: campaignById.get(booking.campaign_id)?.name ?? "Tanpa campaign",
+        campaignId: booking.campaign_id || null,
         content: booking.content_title,
         date: String(booking.scheduled_at).slice(0, 10),
         time: String(booking.scheduled_at).slice(11, 16),
@@ -299,22 +300,25 @@ export async function saveWorkspaceData(
   const campaignIdByName = new Map(data.campaigns.map((campaign) => [campaign.name, campaign.id]));
   const influencerSchedules = data.influencerSchedules
     .filter((schedule) => typeof schedule.id === "string")
-    .map((schedule) => ({
-      id: schedule.id,
-      workspace_id: workspaceId,
-      influencer_name: schedule.influencer,
-      platform: schedule.platform.toLowerCase(),
-      campaign_id: typeof campaignIdByName.get(schedule.campaign) === "string" ? campaignIdByName.get(schedule.campaign) : null,
-      content_title: schedule.content,
-      scheduled_at: `${schedule.date}T${schedule.time || "00:00"}:00+07:00`,
-      status: schedule.status,
-      rate: schedule.rate,
-      spent: schedule.spent,
-      payment_status: schedule.paymentStatus,
-      notes: schedule.notes || null,
-      created_by: userId,
-      updated_at: new Date().toISOString(),
-    }));
+    .map((schedule) => {
+      const campaignId = isUuid(schedule.campaignId) ? schedule.campaignId : campaignIdByName.get(schedule.campaign);
+      return {
+        id: schedule.id,
+        workspace_id: workspaceId,
+        influencer_name: schedule.influencer,
+        platform: schedule.platform.toLowerCase(),
+        campaign_id: isUuid(campaignId) ? campaignId : null,
+        content_title: schedule.content,
+        scheduled_at: `${schedule.date}T${schedule.time || "00:00"}:00+07:00`,
+        status: schedule.status,
+        rate: schedule.rate,
+        spent: schedule.spent,
+        payment_status: schedule.paymentStatus,
+        notes: schedule.notes || null,
+        created_by: userId,
+        updated_at: new Date().toISOString(),
+      };
+    });
 
   const platformToDatabase = { Instagram: "instagram", Facebook: "facebook", Threads: "threads", TikTok: "tiktok" } as const;
   const accountIdByPlatform = new Map(data.socialAccounts.map((account) => [account.platform, account.id]));

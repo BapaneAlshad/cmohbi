@@ -48,7 +48,7 @@ export function AppShell() {
       method: "POST",
       headers: { Authorization: `Bearer ${accessToken}` },
     });
-    const result = await response.json() as { workspaceId?: string; profile?: { name: string; username: string; email: string; whatsapp: string; role: string }; error?: string };
+    const result = await response.json() as { workspaceId?: string; profile?: { name: string; username: string; email: string; whatsapp: string; role: string; accessRole?: UserIdentity["accessRole"] }; error?: string };
     if (!response.ok || !result.workspaceId) throw new Error(result.error || "Workspace gagal disiapkan.");
 
     const profileEmail = result.profile?.email || email;
@@ -59,6 +59,7 @@ export function AppShell() {
       email: profileEmail,
       whatsapp: result.profile?.whatsapp || "",
       role: result.profile?.role || "member",
+      accessRole: result.profile?.accessRole || "member",
     });
     setData(liveData);
     setLiveContext({ workspaceId: result.workspaceId, userId });

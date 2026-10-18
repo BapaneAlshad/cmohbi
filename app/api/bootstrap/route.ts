@@ -70,6 +70,7 @@ export async function POST(request: NextRequest) {
   if (membershipResult.error) return NextResponse.json({ error: membershipResult.error.message }, { status: 500 });
 
   let workspaceId = membershipResult.data?.workspace_id as string | undefined;
+  let membershipRole = membershipResult.data?.role as "owner" | "admin" | "member" | "viewer" | undefined;
   if (!workspaceId) {
     const ownedWorkspace = await admin
       .from("workspaces")
@@ -96,6 +97,7 @@ export async function POST(request: NextRequest) {
       role: "owner",
     });
     if (memberError) return NextResponse.json({ error: memberError.message }, { status: 500 });
+    membershipRole = "owner";
   }
 
   const countResult = await admin.from("campaigns").select("id", { count: "exact", head: true }).eq("workspace_id", workspaceId);
@@ -151,7 +153,8 @@ export async function POST(request: NextRequest) {
       username: profilePayload.username,
       email: profileEmail,
       whatsapp,
-      role: displayRole(existingProfile?.job_title, membershipResult.data?.role),
+      role: displayRole(existingProfile?.job_title, membershipRole),
+      accessRole: membershipRole || "member",
     },
   });
 }

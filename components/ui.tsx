@@ -1,20 +1,26 @@
 "use client";
 
 import {
-  AlertTriangle, BarChart3, Bell, CalendarDays, Check, CheckSquare2, ChevronLeft,
-  ChevronRight, CircleDollarSign, Clock3, Download, Eye, Filter, Handshake,
-  Home, Instagram, LayoutPanelLeft, LogOut, Menu, Megaphone, Moon, MoreHorizontal,
-  Plus, Search, Send, Sparkles, Sun, Target, Users, X, type LucideIcon,
+  AlertTriangle, ArrowLeft, ArrowRight, BarChart3, Bell, BookOpen, CalendarDays,
+  Check, CheckSquare2, ChevronLeft, ChevronRight, Circle, CircleDollarSign, Clock3,
+  Download, Edit3, ExternalLink, Eye, Film, Filter, Handshake, Home, Image as ImageIcon,
+  Info, Instagram, Layers3, LayoutPanelLeft, Link2, LogOut, Menu, MessageSquare,
+  Megaphone, Moon, MoreHorizontal, Paperclip, Pin, Plus, Reply, Search, Send, Share2,
+  Sparkles, Sun, Target, Users, X, type LucideIcon,
 } from "lucide-react";
 
 const icons: Record<string, LucideIcon> = {
-  alert: AlertTriangle, bell: Bell, calendar: CalendarDays, campaign: Megaphone,
+  alert: AlertTriangle, "arrow-left": ArrowLeft, "arrow-right": ArrowRight,
+  bell: Bell, book: BookOpen, calendar: CalendarDays, campaign: Megaphone,
   check: Check, "check-square": CheckSquare2, "chevron-left": ChevronLeft,
-  "chevron-right": ChevronRight, chart: BarChart3, close: X, download: Download,
-  eye: Eye, filter: Filter, handshake: Handshake, home: Home, instagram: Instagram,
-  "log-out": LogOut, menu: Menu, moon: Moon, "more-horizontal": MoreHorizontal,
-  panel: LayoutPanelLeft, plus: Plus, search: Search, send: Send, sparkles: Sparkles,
-  sun: Sun, target: Target, users: Users, wallet: CircleDollarSign, clock: Clock3,
+  "chevron-right": ChevronRight, chart: BarChart3, circle: Circle, close: X,
+  download: Download, edit: Edit3, external: ExternalLink, eye: Eye, film: Film,
+  filter: Filter, handshake: Handshake, home: Home, image: ImageIcon, info: Info,
+  instagram: Instagram, layers: Layers3, link: Link2, "log-out": LogOut, menu: Menu,
+  message: MessageSquare, moon: Moon, "more-horizontal": MoreHorizontal,
+  panel: LayoutPanelLeft, paperclip: Paperclip, pin: Pin, plus: Plus, reply: Reply,
+  search: Search, send: Send, share: Share2, sparkles: Sparkles, sun: Sun,
+  target: Target, users: Users, wallet: CircleDollarSign, clock: Clock3,
 };
 
 export function Icon({ name, size = 16, className }: { name: string; size?: number; className?: string }) {

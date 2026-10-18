@@ -10,6 +10,7 @@ export const demoAccount: UserIdentity = {
   email: "demo.superadmin@hbi.co.id",
   whatsapp: "+6281200000000",
   role: "Super Admin",
+  accessRole: "owner",
 };
 
 export const demoAccountCredentials = {
