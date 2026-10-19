@@ -7,6 +7,7 @@ import { loadLocalData, resetLocalData, saveLocalData } from "@/lib/storage";
 import { createSupabaseBrowserClient, isSupabaseConfigured } from "@/lib/supabase/client";
 import { loadWorkspaceData, saveWorkspaceData } from "@/lib/supabase/workspace-data";
 import { authEmailFromUsername, isValidPin, normalizeUsername } from "@/lib/auth-identity";
+import { createBasicCampaign, validateCampaignPeriod } from "@/lib/campaign-form";
 import { demoAccount, demoAccountCredentials } from "@/lib/demo-account";
 import { AccountView, AnalyticsView, CalendarView, CampaignsView, DashboardView, InfluencerScheduleView, PartnersView, RequestsView, TodoView } from "./views";
 import { SocialHubView } from "./social-hub";
@@ -34,11 +35,12 @@ export function AppShell() {
   const [collapsed, setCollapsed] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [modal, setModal] = useState<string | null>(null);
-  const [toast, setToast] = useState("");
+  const [toast, setToast] = useState<{ message: string; actionLabel?: string; action?: () => void } | null>(null);
   const [authMode, setAuthMode] = useState<"loading" | "signed-out" | "demo" | "live">("loading");
   const [identity, setIdentity] = useState<UserIdentity>(demoAccount);
   const [liveContext, setLiveContext] = useState<{ workspaceId: string; userId: string } | null>(null);
   const [resetUser, setResetUser] = useState<User | null>(null);
+  const [requestedCampaignId, setRequestedCampaignId] = useState<string | null>(null);
   const [supabase] = useState(() => createSupabaseBrowserClient());
   const hydrated = useRef(false);
 
@@ -90,7 +92,7 @@ export function AppShell() {
       try {
         await connectLiveWorkspace(sessionData.session.access_token, userData.user.id, userData.user.email || "");
       } catch (error) {
-        setToast(error instanceof Error ? error.message : "Supabase gagal dimuat.");
+        setToast({ message: error instanceof Error ? error.message : "Supabase gagal dimuat." });
         setAuthMode("signed-out");
       }
     })();
@@ -112,7 +114,7 @@ export function AppShell() {
     const timer = window.setTimeout(() => {
       void saveWorkspaceData(supabase, liveContext.workspaceId, liveContext.userId, data)
         .catch((error) => {
-          setToast(error instanceof Error ? `Gagal menyimpan: ${error.message}` : "Gagal menyimpan ke Supabase.");
+          setToast({ message: error instanceof Error ? `Gagal menyimpan: ${error.message}` : "Gagal menyimpan ke Supabase." });
         });
     }, 700);
     return () => window.clearTimeout(timer);
@@ -135,8 +137,12 @@ export function AppShell() {
       if (supabase) void supabase.auth.signOut();
       return;
     }
-    setToast(message);
-    window.setTimeout(() => setToast(""), 2600);
+    setToast({ message });
+    window.setTimeout(() => setToast(null), 3200);
+  };
+  const notifyAction = (message: string, actionLabel: string, action: () => void) => {
+    setToast({ message, actionLabel, action });
+    window.setTimeout(() => setToast(null), 6000);
   };
   const navigate = (target: string) => { setView(target as ViewName); setSidebarOpen(false); window.scrollTo({ top: 0, behavior: "smooth" }); };
   const openResetPin = (user: User) => { setResetUser(user); setModal("resetPin"); };
@@ -207,7 +213,32 @@ export function AppShell() {
     if (!publicUrl) throw new Error("URL media publik gagal dibuat.");
     return publicUrl;
   }, [liveContext, supabase]);
-  const common = { data, identity, openModal: setModal, openResetPin, navigate, notify, setData, getAccessToken, refreshData, uploadMedia, workspaceId: liveContext?.workspaceId, liveMode: Boolean(supabase && liveContext) };
+  const campaignLifecycleAction = useCallback(async (campaignId: string | number, action: "archive" | "unarchive" | "trash" | "restore" | "permanent-delete", pin?: string) => {
+    if (!supabase || !liveContext) {
+      if (action === "permanent-delete") throw new Error("Hapus permanen hanya tersedia saat Supabase aktif agar verifikasi PIN dilakukan di server.");
+      const now = new Date().toISOString();
+      setData((current) => ({ ...current, campaigns: current.campaigns.map((campaign) => {
+        if (String(campaign.id) !== String(campaignId)) return campaign;
+        if (action === "archive") return { ...campaign, lifecycleStatus: "archived", archivedAt: now };
+        if (action === "unarchive") return { ...campaign, lifecycleStatus: "active", archivedAt: null, archivedBy: null };
+        if (action === "trash") return { ...campaign, lifecycleStatus: "trashed", previousLifecycleStatus: campaign.lifecycleStatus === "archived" ? "archived" : "active", deletedAt: now };
+        return { ...campaign, lifecycleStatus: campaign.previousLifecycleStatus || "active", deletedAt: null, deletedBy: null, previousLifecycleStatus: null };
+      }) }));
+      return;
+    }
+    const token = await getAccessToken();
+    if (!token) throw new Error("Sesi login tidak ditemukan.");
+    const response = await fetch(`/api/campaigns/${campaignId}/lifecycle`, {
+      method: action === "permanent-delete" ? "DELETE" : "PATCH",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify(action === "permanent-delete" ? { pin } : { action }),
+    });
+    const result = await response.json() as { error?: string };
+    if (!response.ok) throw new Error(result.error || "Lifecycle campaign gagal diperbarui.");
+    if (action === "permanent-delete") setData((current) => ({ ...current, campaigns: current.campaigns.filter((campaign) => String(campaign.id) !== String(campaignId)) }));
+    else await refreshData();
+  }, [getAccessToken, liveContext, refreshData, supabase]);
+  const common = { data, identity, openModal: setModal, openResetPin, navigate, notify, notifyAction, setData, getAccessToken, refreshData, campaignLifecycleAction, requestedCampaignId, onCampaignOpened: () => setRequestedCampaignId(null), uploadMedia, workspaceId: liveContext?.workspaceId, liveMode: Boolean(supabase && liveContext) };
 
   const authenticate = async (action: "login" | "signup", name: string, username: string, email: string, whatsapp: string, pin: string) => {
     if (!supabase) {
@@ -244,15 +275,15 @@ export function AppShell() {
     <aside className={`sidebar ${sidebarOpen ? "open" : ""}`} id="sidebar">
       <div className="brand-wrap"><div className="brand-mark">N</div><div className="brand-copy"><div className="brand-name">ngapaya</div><div className="brand-subtitle">Marketing OS</div></div><button className="icon-button sidebar-collapse" onClick={() => setCollapsed(!collapsed)} aria-label="Ciutkan sidebar"><Icon name="panel" /></button><button className="icon-button close-sidebar" onClick={() => setSidebarOpen(false)} aria-label="Tutup menu"><Icon name="close" /></button></div>
       <div className="workspace-switcher soft-inset"><div className="workspace-avatar">H</div><div className="workspace-copy"><strong>HBI Marketing</strong><span>Workspace utama</span></div><span className="chevron">⌄</span></div>
-      <nav className="main-nav" aria-label="Navigasi utama">{navigation.map((item) => <div key={item.view}>{item.group && <div className={`nav-label ${item.group !== "WORKSPACE" ? "nav-gap" : ""}`}>{item.group}</div>}<button className={`nav-item ${view === item.view ? "active" : ""}`} onClick={() => navigate(item.view)}><Icon className="nav-icon" name={item.icon} size={17} /><span>{item.label}</span>{item.count && <span className="nav-count">{item.count}</span>}</button></div>)}</nav>
+      <nav className="main-nav" aria-label="Navigasi utama">{navigation.map((item) => <div key={item.view}>{item.group && <div className={`nav-label ${item.group !== "WORKSPACE" ? "nav-gap" : ""}`}>{item.group}</div>}<button className={`nav-item ${view === item.view ? "active" : ""}`} onClick={() => navigate(item.view)}><Icon className="nav-icon" name={item.icon} size={17} /><span>{item.label}</span>{item.view === "campaigns" ? <span className="nav-count">{data.campaigns.filter((campaign) => (campaign.lifecycleStatus || "active") === "active").length}</span> : item.count && <span className="nav-count">{item.count}</span>}</button></div>)}</nav>
       <div className="sidebar-bottom"><div className="user-mini"><Avatar name={identity.name} /><div className="user-mini-copy"><strong>{identity.name}</strong><span>{identity.role} · HBI</span></div><button className="icon-button" onClick={() => navigate("account")}><Icon name="more-horizontal" /></button></div></div>
     </aside>
     <button className={`sidebar-backdrop ${sidebarOpen ? "visible" : ""}`} onClick={() => setSidebarOpen(false)} aria-label="Tutup menu" />
     <main className="main-area"><header className="topbar"><div className="topbar-left"><button className="icon-button menu-toggle" onClick={() => setSidebarOpen(true)} aria-label="Buka menu"><Icon name="menu" /></button><div className="crumbs"><span>Workspace</span><b>/</b><strong>{titles[view]}</strong></div></div><div className="topbar-actions"><label className="search-box"><Icon name="search" /><input type="search" placeholder="Cari apa saja..." aria-label="Cari di workspace" onKeyDown={(event) => { if (event.key === "Enter") notify(`Pencarian “${event.currentTarget.value}” siap digunakan.`); }} /></label><button className="icon-button theme-button" onClick={() => setTheme(theme === "dark" ? "light" : "dark")} aria-label="Ubah tema"><Icon name={theme === "dark" ? "sun" : "moon"} /></button><button className="icon-button notification-button" onClick={() => notify("Tidak ada notifikasi baru.")} aria-label="Notifikasi"><Icon name="bell" /><i /></button><button className="top-profile" onClick={() => navigate("account")}><Avatar name={identity.name} /><span className="top-profile-copy"><strong>{identity.name}</strong><small>{identity.role}</small></span><span className="chevron">⌄</span></button></div></header>
       <div className="page-content">{view === "dashboard" && <DashboardView {...common} />}{view === "campaigns" && <CampaignsView {...common} />}{view === "todo" && <TodoView {...common} />}{view === "calendar" && <CalendarView {...common} />}{view === "requests" && <RequestsView {...common} />}{view === "partners" && <PartnersView {...common} />}{view === "influencer-schedule" && <InfluencerScheduleView {...common} />}{view === "analytics" && <AnalyticsView {...common} />}{view === "social-hub" && <SocialHubView {...common} />}{view === "account" && <AccountView {...common} />}</div>
     </main>
-    <div className={`toast ${toast ? "show" : ""}`}>{toast}</div>
-    {modal && <AppModal type={modal} data={data} close={closeModal} identity={identity} notify={notify} resetPin={resetPin} resetUser={resetUser} changePin={changePin} updateProfile={updateProfile} createUser={createUser} setData={setData} />}
+    <div className={`toast ${toast ? "show" : ""}`} role="status">{toast?.message}{toast?.action && <button type="button" onClick={() => { toast.action?.(); setToast(null); }}>{toast.actionLabel}</button>}</div>
+    {modal && <AppModal type={modal} data={data} close={closeModal} identity={identity} notify={notify} resetPin={resetPin} resetUser={resetUser} changePin={changePin} updateProfile={updateProfile} createUser={createUser} setData={setData} onCampaignCreated={(campaignId) => { setRequestedCampaignId(campaignId); setView("campaigns"); }} />}
   </div>;
 }
 
@@ -283,7 +314,7 @@ function LoginScreen({ configured, onAuthenticate }: { configured: boolean; onAu
 
 const modalInfo: Record<string, { title: string; description: string }> = {
   task: { title: "Tambah tugas baru", description: "Buat tugas dan pastikan PIC serta deadline-nya jelas." },
-  campaign: { title: "Buat campaign baru", description: "Isi target terukur agar progres campaign mudah dipantau." },
+  campaign: { title: "Buat Campaign Baru", description: "Mulai dari informasi dasar. Detail bisa dilengkapi nanti." },
   content: { title: "Jadwalkan konten", description: "Konten baru akan masuk kalender dengan status Draf." },
   request: { title: "Buat request / ide", description: "Catat masukan agar bisa ditindaklanjuti dengan jelas." },
   influencer: { title: "Tambah influencer", description: "Simpan profil KOL untuk kolaborasi Instagram, Facebook, atau TikTok." },
@@ -296,41 +327,72 @@ const modalInfo: Record<string, { title: string; description: string }> = {
   metrics: { title: "Isi data sosial manual", description: "Gunakan saat konektor API belum diaktifkan." },
 };
 
-function AppModal({ type, data, close, identity, notify, resetPin, resetUser, changePin, updateProfile, createUser, setData }: { type: string; data: AppData; close: () => void; identity: UserIdentity; notify: (message: string) => void; resetPin: (username: string, pin: string) => Promise<void>; resetUser: User | null; changePin: (pin: string) => Promise<void>; updateProfile: (name: string, email: string, whatsapp: string) => Promise<void>; createUser: (input: { name: string; username: string; email: string; whatsapp: string; role: string; pin: string }) => Promise<void>; setData: React.Dispatch<React.SetStateAction<AppData>> }) {
+function AppModal({ type, data, close, identity, notify, resetPin, resetUser, changePin, updateProfile, createUser, setData, onCampaignCreated }: { type: string; data: AppData; close: () => void; identity: UserIdentity; notify: (message: string) => void; resetPin: (username: string, pin: string) => Promise<void>; resetUser: User | null; changePin: (pin: string) => Promise<void>; updateProfile: (name: string, email: string, whatsapp: string) => Promise<void>; createUser: (input: { name: string; username: string; email: string; whatsapp: string; role: string; pin: string }) => Promise<void>; setData: React.Dispatch<React.SetStateAction<AppData>>; onCampaignCreated: (campaignId: string) => void }) {
   const info = modalInfo[type];
   const [pending, setPending] = useState(false);
+  const [formError, setFormError] = useState("");
   if (!info) return null;
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (pending) return;
     const values = Object.fromEntries(new FormData(event.currentTarget).entries());
     setPending(true);
+    setFormError("");
     try {
       if (type === "resetPin") await resetPin(String(values.username || ""), String(values.pin || ""));
       else if (type === "password") await changePin(String(values.pin || ""));
       else if (type === "profile") await updateProfile(String(values.name || ""), String(values.email || ""), String(values.whatsapp || ""));
       else if (type === "user") await createUser({ name: String(values.name || ""), username: String(values.username || ""), email: String(values.email || ""), whatsapp: String(values.whatsapp || ""), role: String(values.role || ""), pin: String(values.pin || "") });
-      else setData((current) => applyModal(type, values, current));
+      else if (type === "campaign") {
+        const name = String(values.name || "").trim();
+        const brand = String(values.brand || "").trim();
+        const startDate = String(values.startDate || "");
+        const endDate = String(values.endDate || "");
+        const brands = existingBrands(data);
+        if (!name) throw new Error("Nama Campaign wajib diisi.");
+        if (!brand || !brands.includes(brand)) throw new Error("Pilih Brand dari data yang tersedia.");
+        const periodError = validateCampaignPeriod(startDate, endDate);
+        if (periodError) throw new Error(periodError);
+        const id = globalThis.crypto.randomUUID();
+        const campaign = createBasicCampaign(id, { name, brand, startDate, endDate, objective: String(values.objective || "") });
+        setData((current) => ({ ...current, campaigns: [campaign, ...current.campaigns] }));
+        close();
+        notify("Campaign baru dibuat sebagai Rencana.");
+        onCampaignCreated(id);
+        return;
+      } else setData((current) => applyModal(type, values, current));
       close();
       notify(successMessages[type] ?? "Perubahan berhasil disimpan.");
     } catch (error) {
-      notify(error instanceof Error ? error.message : "Perubahan gagal disimpan.");
+      const message = error instanceof Error ? error.message : "Perubahan gagal disimpan.";
+      if (type === "campaign") setFormError(message);
+      else notify(message);
     } finally {
       setPending(false);
     }
   };
-  return <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) close(); }}><section className="modal"><div className="modal-head"><div><h2>{info.title}</h2><p>{info.description}</p></div><button className="icon-button modal-close" onClick={close} aria-label="Tutup"><Icon name="close" /></button></div><form onSubmit={submit}>{formFields(type, data, resetUser, identity)}<div className="modal-actions">{type === "metrics" && <button type="button" className="button button-ghost" onClick={() => { setData(resetLocalData()); close(); notify("Data demo dikembalikan ke kondisi awal."); }}>Reset demo</button>}<button type="button" className="button button-ghost" onClick={close}>Batal</button><button type="submit" className="button button-primary" disabled={pending}>{pending ? "Memproses…" : "Simpan perubahan"}</button></div></form></section></div>;
+  return <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget && !pending) close(); }}><section className={`modal ${type === "campaign" ? "campaign-create-modal" : ""}`}><div className="modal-head"><div><h2>{info.title}</h2><p>{info.description}</p></div><button type="button" className="icon-button modal-close" onClick={close} aria-label="Tutup" disabled={pending}><Icon name="close" /></button></div><form onSubmit={submit}>{formFields(type, data, resetUser, identity)}{formError && <div className="campaign-form-error" role="alert"><Icon name="alert" size={14} />{formError}</div>}<div className="modal-actions">{type === "metrics" && <button type="button" className="button button-ghost" onClick={() => { setData(resetLocalData()); close(); notify("Data demo dikembalikan ke kondisi awal."); }}>Reset demo</button>}<button type="button" className="button button-ghost" onClick={close} disabled={pending}>Batal</button><button type="submit" className="button button-primary" disabled={pending}>{pending ? "Membuat…" : type === "campaign" ? "Buat Campaign" : "Simpan perubahan"}</button></div></form></section></div>;
 }
 
 function Field({ label, name, required, type = "text", defaultValue, placeholder, minLength, maxLength, pattern, inputMode, autoComplete, readOnly }: { label: string; name: string; required?: boolean; type?: string; defaultValue?: string; placeholder?: string; minLength?: number; maxLength?: number; pattern?: string; inputMode?: "none" | "text" | "tel" | "url" | "email" | "numeric" | "decimal" | "search"; autoComplete?: string; readOnly?: boolean }) { return <div className="form-field"><label>{label}{required ? " *" : ""}</label><input className="modal-input" name={name} type={type} required={required} defaultValue={defaultValue} placeholder={placeholder} minLength={minLength} maxLength={maxLength} pattern={pattern} inputMode={inputMode} autoComplete={autoComplete} readOnly={readOnly} /></div>; }
-function SelectField({ label, name, values }: { label: string; name: string; values: string[] }) { return <div className="form-field"><label>{label}</label><select className="modal-input" name={name}>{values.map((value) => <option key={value}>{value}</option>)}</select></div>; }
+function SelectField({ label, name, values, required = false, placeholder }: { label: string; name: string; values: string[]; required?: boolean; placeholder?: string }) { return <div className="form-field"><label>{label}{required ? " *" : ""}</label><select className="modal-input" name={name} required={required} defaultValue={placeholder ? "" : values[0]}>{placeholder && <option value="" disabled>{placeholder}</option>}{values.map((value) => <option key={value}>{value}</option>)}</select></div>; }
+
+function existingBrands(data: AppData) {
+  return Array.from(new Set([
+    ...data.campaigns.map((item) => item.brand),
+    ...data.content.map((item) => item.brand),
+    ...data.requests.map((item) => item.brand),
+    ...data.transactions.map((item) => item.brand),
+  ].map((brand) => brand.trim()).filter(Boolean))).sort((left, right) => left.localeCompare(right, "id"));
+}
 
 function formFields(type: string, data: AppData, resetUser: User | null = null, identity: UserIdentity | null = null) {
   if (type === "task") return <div className="form-stack"><Field label="Judul tugas" name="title" required placeholder="Contoh: Finalisasi key visual" /><div className="two-fields"><SelectField label="PIC" name="pic" values={data.users.map((user) => user.name)} /><SelectField label="Brand" name="brand" values={["HBI", "HokBen"]} /></div><div className="two-fields"><Field label="Deadline" name="due" type="date" required defaultValue="2026-10-14" /><SelectField label="Prioritas" name="priority" values={["Sedang", "Tinggi", "Rendah"]} /></div></div>;
-  if (type === "campaign") return <div className="form-stack"><Field label="Nama campaign" name="name" required /><div className="two-fields"><SelectField label="Brand" name="brand" values={["HBI", "HokBen"]} /><SelectField label="PIC" name="pic" values={data.users.map((user) => user.name)} /></div><Field label="Tujuan campaign" name="objective" required /><div className="two-fields"><Field label="Target / KPI" name="kpi" required /><Field label="Budget rencana" name="budget" type="number" /></div></div>;
+  if (type === "campaign") return <div className="form-stack campaign-create-fields"><Field label="Nama Campaign" name="name" required placeholder="Contoh: Grand Opening RUMA Purwokerto" /><SelectField label="Brand" name="brand" values={existingBrands(data)} required placeholder="Pilih brand" /><div className="campaign-form-group"><div><strong>Periode Campaign</strong><span>Opsional, dapat diatur nanti.</span></div><div className="two-fields"><Field label="Tanggal mulai" name="startDate" type="date" /><Field label="Tanggal selesai" name="endDate" type="date" /></div></div><div className="form-field"><label>Tujuan Singkat</label><textarea className="modal-input campaign-objective-input" name="objective" maxLength={280} placeholder="Apa tujuan utama campaign ini?" /></div><div className="campaign-create-note"><Icon name="info" size={15} /><span>Brief, KPI, promo, timeline, tugas, influencer, dan budget dapat dilengkapi melalui Campaign Workspace setelah dibuat.</span></div></div>;
   if (type === "content") return <div className="form-stack"><Field label="Judul konten" name="title" required /><div className="two-fields"><SelectField label="Brand" name="brand" values={["HBI", "HokBen"]} /><SelectField label="Platform" name="platform" values={["Instagram", "Facebook", "Threads", "TikTok"]} /></div><Field label="Tanggal tayang" name="date" type="date" required defaultValue="2026-10-20" /><div className="form-field"><label>Caption / brief</label><textarea className="modal-input" name="caption" /></div></div>;
   if (type === "request") return <div className="form-stack"><Field label="Nama pengirim" name="sender" required /><div className="form-field"><label>Isi request / ide *</label><textarea className="modal-input" name="title" required /></div><div className="two-fields"><SelectField label="Brand" name="brand" values={["HBI", "HokBen"]} /><SelectField label="Prioritas" name="priority" values={["Sedang", "Tinggi", "Rendah"]} /></div></div>;
   if (type === "influencer") return <div className="form-stack"><Field label="Nama influencer" name="name" required /><div className="two-fields"><SelectField label="Platform" name="platform" values={["Instagram", "Facebook", "TikTok"]} /><Field label="Niche" name="niche" /></div><div className="two-fields"><Field label="Rate card" name="rate" type="number" /><Field label="Followers" name="followers" /></div></div>;
-  if (type === "influencerSchedule") return <div className="form-stack"><div className="two-fields"><SelectField label="Influencer / selebgram" name="influencer" values={data.influencers.map((item) => item.name)} /><SelectField label="Platform" name="platform" values={["Instagram", "Facebook", "TikTok"]} /></div><Field label="Judul konten / deliverable" name="content" required placeholder="Contoh: Reels promo menu baru" /><div className="two-fields"><SelectField label="Campaign" name="campaign" values={["Tanpa campaign", ...data.campaigns.map((item) => item.name)]} /><Field label="Tanggal tayang" name="date" type="date" required defaultValue="2026-10-20" /></div><div className="two-fields"><Field label="Jam tayang" name="time" type="time" required defaultValue="19:00" /><SelectField label="Status kerja sama" name="status" values={["Terjadwal", "Draft", "Selesai", "Dibatalkan"]} /></div><div className="two-fields"><Field label="Rate / budget" name="rate" type="number" required /><Field label="Spent / realisasi" name="spent" type="number" required /></div><SelectField label="Status pembayaran" name="paymentStatus" values={["Belum dibayar", "DP dibayar", "Lunas"]} /><div className="form-field"><label>Catatan</label><textarea className="modal-input" name="notes" placeholder="Brief, link asset, atau catatan pembayaran" /></div></div>;
+  if (type === "influencerSchedule") return <div className="form-stack"><div className="two-fields"><SelectField label="Influencer / selebgram" name="influencer" values={data.influencers.map((item) => item.name)} /><SelectField label="Platform" name="platform" values={["Instagram", "Facebook", "TikTok"]} /></div><Field label="Judul konten / deliverable" name="content" required placeholder="Contoh: Reels promo menu baru" /><div className="two-fields"><SelectField label="Campaign" name="campaign" values={["Tanpa campaign", ...data.campaigns.filter((item) => (item.lifecycleStatus || "active") === "active").map((item) => item.name)]} /><Field label="Tanggal tayang" name="date" type="date" required defaultValue="2026-10-20" /></div><div className="two-fields"><Field label="Jam tayang" name="time" type="time" required defaultValue="19:00" /><SelectField label="Status kerja sama" name="status" values={["Terjadwal", "Draft", "Selesai", "Dibatalkan"]} /></div><div className="two-fields"><Field label="Rate / budget" name="rate" type="number" required /><Field label="Spent / realisasi" name="spent" type="number" required /></div><SelectField label="Status pembayaran" name="paymentStatus" values={["Belum dibayar", "DP dibayar", "Lunas"]} /><div className="form-field"><label>Catatan</label><textarea className="modal-input" name="notes" placeholder="Brief, link asset, atau catatan pembayaran" /></div></div>;
   if (type === "transaction") return <div className="form-stack"><Field label="Vendor" name="vendor" required /><div className="two-fields"><SelectField label="Kategori" name="category" values={["Digital Ads", "KOL & Influencer", "Produksi Konten", "Event & Aktivasi"]} /><Field label="Jumlah" name="amount" type="number" required /></div><div className="two-fields"><SelectField label="Tipe" name="transactionType" values={["Realisasi", "Rencana"]} /><SelectField label="Brand" name="brand" values={["HBI", "HokBen"]} /></div></div>;
   if (type === "user") return <div className="form-stack"><Field label="Nama lengkap" name="name" required /><Field label="Username" name="username" required minLength={3} maxLength={32} pattern="[a-z][a-z0-9._-]{2,31}" /><Field label="Email profil" name="email" type="email" required /><Field label="Nomor WhatsApp" name="whatsapp" type="tel" required /><Field label="PIN awal" name="pin" type="password" required minLength={6} maxLength={6} pattern="[0-9]{6}" inputMode="numeric" autoComplete="new-password" /><SelectField label="Peran" name="role" values={["Content Creator", "Creative Designer", "Support Marketing", "Tim Konten", "Guest"]} /></div>;
   if (type === "profile") return <div className="form-stack"><Field label="Nama lengkap" name="name" required defaultValue={identity?.name} /><Field label="Username" name="username" defaultValue={identity?.username} readOnly /><Field label="Email profil" name="email" type="email" required defaultValue={identity?.email} /><Field label="Nomor WhatsApp" name="whatsapp" type="tel" required defaultValue={identity?.whatsapp} /></div>;
@@ -344,7 +406,6 @@ const successMessages: Record<string, string> = { task: "Tugas baru berhasil dit
 function applyModal(type: string, values: Record<string, FormDataEntryValue>, current: AppData): AppData {
   const value = (key: string) => String(values[key] ?? "");
   if (type === "task") { const task: Task = { id: globalThis.crypto.randomUUID(), title: value("title"), brand: value("brand"), pic: value("pic"), due: value("due"), dueDate: value("due"), priority: value("priority"), status: "Backlog", campaign: null }; return { ...current, tasks: [...current.tasks, task] }; }
-  if (type === "campaign") return { ...current, campaigns: [{ id: globalThis.crypto.randomUUID(), name: value("name"), brand: value("brand"), pic: value("pic"), period: "Oktober — November 2026", status: "Rencana", progress: 0, budget: Number(value("budget")), spent: 0, kpi: value("kpi"), tasks: 0, content: 0 }, ...current.campaigns] };
   if (type === "content") { const item: ContentItem = { id: globalThis.crypto.randomUUID(), title: value("title"), date: Number(value("date").slice(-2)), status: "Draf", brand: value("brand"), platform: value("platform") as ContentItem["platform"], scheduledAt: value("date") }; return { ...current, content: [...current.content, item] }; }
   if (type === "request") return { ...current, requests: [{ id: globalThis.crypto.randomUUID(), title: value("title"), sender: value("sender"), date: value("date") || new Date().toISOString().slice(0, 10), brand: value("brand"), priority: value("priority"), status: "Baru", icon: "✦" }, ...current.requests] };
   if (type === "influencer") { const item: Influencer = { id: globalThis.crypto.randomUUID(), name: value("name"), platform: value("platform") as Influencer["platform"], niche: value("niche") || "Belum diisi", rate: Number(value("rate")), followers: value("followers") || "—", engagement: "—", status: "Review" }; return { ...current, influencers: [...current.influencers, item] }; }

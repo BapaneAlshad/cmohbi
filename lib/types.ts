@@ -3,8 +3,9 @@ export type SocialPlatform = "instagram" | "facebook" | "threads" | "tiktok";
 export type SocialInboxKind = "comment" | "message";
 export type TaskStatus = "Backlog" | "To Do" | "In Progress" | "Review" | "Revisi" | "Done";
 export type EntityId = number | string;
+export type CampaignLifecycle = "active" | "archived" | "trashed";
 
-export interface Campaign { id: EntityId; name: string; brand: string; pic: string; period: string; status: string; progress: number; budget: number; spent: number; kpi: string; tasks: number; content: number }
+export interface Campaign { id: EntityId; name: string; brand: string; objective: string; startDate?: string | null; endDate?: string | null; period: string; status: string; progress: number; budget: number; spent: number; kpi: string; tasks: number; content: number; lifecycleStatus: CampaignLifecycle; archivedAt?: string | null; archivedBy?: string | null; deletedAt?: string | null; deletedBy?: string | null; previousLifecycleStatus?: Exclude<CampaignLifecycle, "trashed"> | null }
 export interface Task { id: EntityId; title: string; brand: string; pic: string; due: string; dueDate?: string; priority: string; status: TaskStatus; campaign: EntityId | null }
 export interface ContentItem { id: number | string; title: string; date: number; status: string; brand: string; platform: "Instagram" | "Facebook" | "Threads" | "TikTok"; caption?: string; mediaUrl?: string; mediaType?: "feed" | "reel" | "video"; scheduledAt?: string }
 export interface RequestItem { id: EntityId; title: string; sender: string; date: string; brand: string; priority: string; status: string; pic?: string; icon: string }

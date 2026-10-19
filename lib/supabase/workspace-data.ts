@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { AppData, ContentItem, EntityId, TaskStatus } from "@/lib/types";
+import { formatCampaignPeriod } from "@/lib/campaign-form";
 
 const taskStatusToDatabase: Record<TaskStatus, string> = {
   Backlog: "backlog",
@@ -20,12 +21,6 @@ function formatDate(value: string | null) {
     .format(new Date(`${value}T00:00:00`));
 }
 
-function formatPeriod(start: string | null, end: string | null) {
-  if (!start && !end) return "Belum dijadwalkan";
-  if (!start || !end) return formatDate(start || end);
-  return `${formatDate(start)} — ${formatDate(end)}`;
-}
-
 function isMissingBookingsTable(error: { code?: string; message?: string } | null) {
   return error?.code === "42P01" || error?.message?.includes("influencer_bookings");
 }
@@ -37,6 +32,13 @@ function isMissingSocialHubTable(error: { code?: string; message?: string } | nu
 function isMissingOperationalTable(error: { code?: string; message?: string } | null) {
   const message = error?.message?.toLowerCase() ?? "";
   return error?.code === "42P01" || ["marketing_requests", "marketing_influencers", "marketing_transactions"].some((table) => message.includes(table));
+}
+
+function isMissingCampaignAuditColumn(error: { code?: string; message?: string } | null) {
+  const message = error?.message?.toLowerCase() ?? "";
+  return error?.code === "42703"
+    || error?.code === "PGRST204"
+    || ["created_by", "updated_by", "updated_at"].some((column) => message.includes(column));
 }
 
 function isUuid(value: EntityId | null | undefined): value is string {
@@ -196,15 +198,23 @@ export async function loadWorkspaceData(
       id: campaign.id,
       name: campaign.name,
       brand: campaign.brand,
-      pic: profileById.get(campaign.owner_id)?.full_name ?? "Belum ditentukan",
-      period: formatPeriod(campaign.start_date, campaign.end_date),
+      objective: campaign.objective || "",
+      startDate: campaign.start_date,
+      endDate: campaign.end_date,
+      period: formatCampaignPeriod(campaign.start_date, campaign.end_date),
       status: campaign.status,
       progress: Number(campaign.progress),
       budget: Number(campaign.budget),
       spent: Number(campaign.spent),
-      kpi: campaign.kpi || campaign.objective || "Belum ditentukan",
+      kpi: campaign.kpi || "",
       tasks: taskRows.filter((task) => task.campaign_id === campaign.id).length,
       content: 0,
+      lifecycleStatus: campaign.lifecycle_status || "active",
+      archivedAt: campaign.archived_at,
+      archivedBy: campaign.archived_by,
+      deletedAt: campaign.deleted_at,
+      deletedBy: campaign.deleted_by,
+      previousLifecycleStatus: campaign.previous_lifecycle_status,
     })),
     tasks: taskRows.map((task) => ({
       id: task.id,
@@ -254,33 +264,59 @@ export async function saveWorkspaceData(
   userId: string,
   data: AppData,
 ) {
-  const [existingCampaignResult, existingTaskResult, existingRequestResult] = await Promise.all([
-    client.from("campaigns").select("id, owner_id").eq("workspace_id", workspaceId),
+  const [existingCampaignAuditResult, existingTaskResult, existingRequestResult] = await Promise.all([
+    client.from("campaigns").select("id, owner_id, created_by").eq("workspace_id", workspaceId),
     client.from("tasks").select("id, assignee_id, created_by").eq("workspace_id", workspaceId),
     client.from("marketing_requests").select("id, pic_id").eq("workspace_id", workspaceId),
   ]);
-  if (existingCampaignResult.error) throw existingCampaignResult.error;
+  let campaignAuditColumnsAvailable = true;
+  let existingCampaignRows: Array<{ id: string; owner_id: string | null; created_by?: string | null }>;
+  if (existingCampaignAuditResult.error && isMissingCampaignAuditColumn(existingCampaignAuditResult.error)) {
+    campaignAuditColumnsAvailable = false;
+    const legacyCampaignResult = await client.from("campaigns").select("id, owner_id").eq("workspace_id", workspaceId);
+    if (legacyCampaignResult.error) throw legacyCampaignResult.error;
+    existingCampaignRows = legacyCampaignResult.data ?? [];
+  } else {
+    if (existingCampaignAuditResult.error) throw existingCampaignAuditResult.error;
+    existingCampaignRows = existingCampaignAuditResult.data ?? [];
+  }
   if (existingTaskResult.error) throw existingTaskResult.error;
   if (existingRequestResult.error && !isMissingOperationalTable(existingRequestResult.error)) throw existingRequestResult.error;
 
-  const existingCampaignById = new Map((existingCampaignResult.data ?? []).map((campaign) => [campaign.id, campaign]));
+  const existingCampaignById = new Map(existingCampaignRows.map((campaign) => [campaign.id, campaign]));
   const existingTaskById = new Map((existingTaskResult.data ?? []).map((task) => [task.id, task]));
   const existingRequestById = new Map((existingRequestResult.data ?? []).map((request) => [request.id, request]));
   const campaigns = data.campaigns
     .filter((campaign) => typeof campaign.id === "string")
-    .map((campaign) => ({
-      id: campaign.id,
-      workspace_id: workspaceId,
-      name: campaign.name,
-      brand: campaign.brand,
-      objective: campaign.kpi,
-      kpi: campaign.kpi,
-      budget: campaign.budget,
-      spent: campaign.spent,
-      status: campaign.status,
-      progress: campaign.progress,
-      owner_id: existingCampaignById.get(campaign.id)?.owner_id ?? userId,
-    }));
+    .map((campaign) => {
+      const existingCampaign = existingCampaignById.get(campaign.id as string);
+      return {
+        id: campaign.id,
+        workspace_id: workspaceId,
+        name: campaign.name,
+        brand: campaign.brand,
+        objective: campaign.objective || null,
+        kpi: campaign.kpi,
+        budget: campaign.budget,
+        spent: campaign.spent,
+        status: campaign.status,
+        progress: campaign.progress,
+        owner_id: existingCampaign?.owner_id ?? null,
+        ...(campaignAuditColumnsAvailable ? {
+          created_by: existingCampaign?.created_by ?? userId,
+          updated_by: userId,
+          updated_at: new Date().toISOString(),
+        } : {}),
+        start_date: campaign.startDate || null,
+        end_date: campaign.endDate || null,
+        lifecycle_status: campaign.lifecycleStatus,
+        archived_at: campaign.archivedAt || null,
+        archived_by: campaign.archivedBy || null,
+        deleted_at: campaign.deletedAt || null,
+        deleted_by: campaign.deletedBy || null,
+        previous_lifecycle_status: campaign.previousLifecycleStatus || null,
+      };
+    });
 
   const tasks = data.tasks
     .filter((task) => typeof task.id === "string")

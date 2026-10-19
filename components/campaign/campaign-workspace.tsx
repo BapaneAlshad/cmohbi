@@ -2,6 +2,7 @@
 
 import { FormEvent, KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
 import type { AppData, EntityId, Task, UserIdentity } from "@/lib/types";
+import { formatCampaignPeriod, validateCampaignPeriod } from "@/lib/campaign-form";
 import { Avatar, Icon, rupiah, StatusPill } from "@/components/ui";
 import {
   BudgetProgress,
@@ -25,7 +26,7 @@ import {
 
 type Campaign = AppData["campaigns"][number];
 type CampaignTab = "overview" | "brief" | "timeline" | "content" | "finance" | "discussion";
-type CampaignDialogType = "brief" | "kpi" | "promo" | "phase" | "task" | "reference";
+type CampaignDialogType = "info" | "brief" | "kpi" | "promo" | "phase" | "task" | "reference";
 
 type PresentationKpi = {
   id: string;
@@ -96,34 +97,38 @@ export function CampaignWorkspace({
   data,
   identity,
   loading = false,
+  readOnly = false,
   error,
   onBack,
   onNavigate,
   setData,
   notify,
+  onLifecycleAction,
 }: {
   campaign?: Campaign;
   data: AppData;
   identity?: UserIdentity;
   loading?: boolean;
+  readOnly?: boolean;
   error?: string;
   onBack: () => void;
   onNavigate: (view: string) => void;
   setData: React.Dispatch<React.SetStateAction<AppData>>;
   notify: (message: string) => void;
+  onLifecycleAction?: (action: "archive" | "unarchive" | "trash") => void;
 }) {
   if (loading) return <CampaignWorkspaceSkeleton />;
   if (error || !campaign) {
     return <div className="card campaign-state-card"><EmptyCampaignState icon="alert" title="Detail campaign tidak dapat dibuka" description={error || "Campaign mungkin sudah dihapus atau tidak tersedia di workspace ini."} action={<button className="button button-soft" onClick={onBack}><Icon name="arrow-left" size={14} />Kembali ke daftar</button>} /></div>;
   }
-  return <CampaignWorkspaceContent campaign={campaign} data={data} identity={identity} onBack={onBack} onNavigate={onNavigate} setData={setData} notify={notify} />;
+  return <CampaignWorkspaceContent campaign={campaign} data={data} identity={identity} readOnly={readOnly} onBack={onBack} onNavigate={onNavigate} setData={setData} notify={notify} onLifecycleAction={onLifecycleAction} />;
 }
 
 function CampaignWorkspaceSkeleton() {
   return <div className="campaign-skeleton" aria-label="Memuat detail campaign"><div className="campaign-skeleton-line wide" /><div className="campaign-skeleton-line short" /><div className="campaign-skeleton-tabs" /><div className="campaign-skeleton-grid"><div /><div /><div /></div></div>;
 }
 
-function CampaignWorkspaceContent({ campaign, data, identity, onBack, onNavigate, setData, notify }: { campaign: Campaign; data: AppData; identity?: UserIdentity; onBack: () => void; onNavigate: (view: string) => void; setData: React.Dispatch<React.SetStateAction<AppData>>; notify: (message: string) => void }) {
+function CampaignWorkspaceContent({ campaign, data, identity, readOnly, onBack, onNavigate, setData, notify, onLifecycleAction }: { campaign: Campaign; data: AppData; identity?: UserIdentity; readOnly: boolean; onBack: () => void; onNavigate: (view: string) => void; setData: React.Dispatch<React.SetStateAction<AppData>>; notify: (message: string) => void; onLifecycleAction?: (action: "archive" | "unarchive" | "trash") => void }) {
   const [activeTab, setActiveTab] = useState<CampaignTab>("overview");
   const [dialog, setDialog] = useState<CampaignDialogType | null>(null);
   const [dialogError, setDialogError] = useState("");
@@ -132,7 +137,9 @@ function CampaignWorkspaceContent({ campaign, data, identity, onBack, onNavigate
   const [taskView, setTaskView] = useState<"phase" | "all">("phase");
   const [contentFilter, setContentFilter] = useState<"all" | "internal" | "influencer">("all");
   const [replyTo, setReplyTo] = useState<string | undefined>();
-  const canEdit = identity?.accessRole !== "viewer";
+  const [lifecycleMenuOpen, setLifecycleMenuOpen] = useState(false);
+  const canManage = identity?.accessRole === "owner" || identity?.accessRole === "admin";
+  const canEdit = !readOnly && identity?.accessRole !== "viewer";
 
   const campaignTasks = useMemo(() => data.tasks.filter((task) => entityKey(task.campaign ?? "") === entityKey(campaign.id)), [campaign.id, data.tasks]);
   const linkedInfluencers = useMemo(() => data.influencerSchedules.filter((item) => item.campaignId != null ? entityKey(item.campaignId) === entityKey(campaign.id) : item.campaign === campaign.name), [campaign.id, campaign.name, data.influencerSchedules]);
@@ -141,7 +148,7 @@ function CampaignWorkspaceContent({ campaign, data, identity, onBack, onNavigate
   const completedTasks = campaignTasks.filter((task) => task.status === "Done").length;
   const taskProgress = campaignTasks.length ? Math.round((completedTasks / campaignTasks.length) * 100) : 0;
   const budgetProgress = campaign.budget ? Math.round((campaign.spent / campaign.budget) * 100) : 0;
-  const teamNames = Array.from(new Set([campaign.pic, ...campaignTasks.map((task) => task.pic)].filter((name) => Boolean(name) && name !== "Belum ditentukan")));
+  const teamNames = Array.from(new Set(campaignTasks.map((task) => task.pic).filter((name) => Boolean(name) && name !== "Belum ditentukan")));
   const currentPhase = presentation.phases.find((phase) => phase.id === selectedPhase) || presentation.phases[0];
   const activePhaseId = currentPhase?.id || "";
 
@@ -169,6 +176,18 @@ function CampaignWorkspaceContent({ campaign, data, identity, onBack, onNavigate
     if (!canEdit) return setDialogError("Akun Viewer tidak memiliki izin untuk menyimpan perubahan Campaign.");
     const values = new FormData(event.currentTarget);
     const value = (name: string) => String(values.get(name) || "").trim();
+
+    if (dialog === "info") {
+      const name = value("name");
+      const brand = value("brand");
+      const startDate = value("startDate");
+      const endDate = value("endDate");
+      if (!name || !brand) return setDialogError("Nama Campaign dan Brand wajib diisi.");
+      const periodError = validateCampaignPeriod(startDate, endDate);
+      if (periodError) return setDialogError(periodError);
+      setData((current) => ({ ...current, campaigns: current.campaigns.map((item) => String(item.id) === String(campaign.id) ? { ...item, name, brand, objective: value("objective"), startDate: startDate || null, endDate: endDate || null, period: formatCampaignPeriod(startDate, endDate) } : item) }));
+      notify("Informasi dasar Campaign berhasil diperbarui.");
+    }
 
     if (dialog === "brief") {
       const bigMessage = value("bigMessage");
@@ -204,7 +223,7 @@ function CampaignWorkspaceContent({ campaign, data, identity, onBack, onNavigate
     if (dialog === "task") {
       if (!value("title") || !value("due")) return setDialogError("Judul tugas dan tenggat wajib diisi.");
       const id = globalThis.crypto.randomUUID();
-      const task: Task = { id, title: value("title"), brand: campaign.brand, pic: value("pic") || campaign.pic, due: value("due"), dueDate: value("due"), priority: value("priority") || "Sedang", status: "To Do", campaign: campaign.id };
+      const task: Task = { id, title: value("title"), brand: campaign.brand, pic: value("pic") || "Belum ditentukan", due: value("due"), dueDate: value("due"), priority: value("priority") || "Sedang", status: "To Do", campaign: campaign.id };
       setData((current) => ({ ...current, tasks: [...current.tasks, task] }));
       const phaseId = value("phaseId");
       if (phaseId) updatePresentation((current) => ({ ...current, taskPhase: { ...current.taskPhase, [id]: phaseId } }));
@@ -240,7 +259,7 @@ function CampaignWorkspaceContent({ campaign, data, identity, onBack, onNavigate
   };
 
   const shareSummary = async () => {
-    const summary = `${campaign.name} · ${campaign.brand} · ${campaign.period} · ${campaign.status} · Owner ${campaign.pic}`;
+    const summary = `${campaign.name} · ${campaign.brand} · ${campaign.period} · ${campaign.status}`;
     try {
       if (navigator.share) await navigator.share({ title: campaign.name, text: summary });
       else await navigator.clipboard.writeText(summary);
@@ -251,7 +270,7 @@ function CampaignWorkspaceContent({ campaign, data, identity, onBack, onNavigate
   };
 
   const tabContent = {
-    overview: <OverviewTab campaign={campaign} tasks={campaignTasks} completedTasks={completedTasks} taskProgress={taskProgress} budgetProgress={budgetProgress} presentation={presentation} teamNames={teamNames} linkedInfluencerCount={linkedInfluencers.length} canEdit={canEdit} onOpenTab={setActiveTab} onEditBrief={() => openDialog("brief")} onAddKpi={() => openDialog("kpi")} onAddPromo={() => openDialog("promo")} onToggleTask={toggleTask} onAcknowledge={() => updatePresentation((current) => ({ ...current, acknowledged: !current.acknowledged }))} />,
+    overview: <OverviewTab campaign={campaign} tasks={campaignTasks} completedTasks={completedTasks} taskProgress={taskProgress} budgetProgress={budgetProgress} presentation={presentation} teamNames={teamNames} linkedInfluencerCount={linkedInfluencers.length} canEdit={canEdit} onOpenTab={setActiveTab} onEditInfo={() => openDialog("info")} onEditBrief={() => openDialog("brief")} onAddKpi={() => openDialog("kpi")} onAddPromo={() => openDialog("promo")} onToggleTask={toggleTask} onAcknowledge={() => updatePresentation((current) => ({ ...current, acknowledged: !current.acknowledged }))} />,
     brief: <BriefPromoTab campaign={campaign} presentation={presentation} canEdit={canEdit} onEditBrief={() => openDialog("brief")} onAddPromo={() => openDialog("promo")} onAddReference={() => openDialog("reference")} />,
     timeline: <TimelineTasksTab campaign={campaign} tasks={campaignTasks} presentation={presentation} selectedPhaseId={activePhaseId} taskView={taskView} canEdit={canEdit} onTaskView={setTaskView} onSelectPhase={setSelectedPhase} onAssignTaskPhase={assignTaskPhase} onTogglePhaseMode={() => { updatePresentation((current) => ({ ...current, phaseMode: !current.phaseMode })); if (canEdit) notify("Mode fase diubah untuk sesi tampilan ini."); }} onAddPhase={() => openDialog("phase")} onAddTask={() => openDialog("task")} onToggleTask={toggleTask} />,
     content: <ContentInfluencerTab linkedInfluencers={linkedInfluencers} brandContent={brandContentCandidates} filter={contentFilter} onFilter={setContentFilter} onNavigate={onNavigate} />,
@@ -261,13 +280,14 @@ function CampaignWorkspaceContent({ campaign, data, identity, onBack, onNavigate
 
   return <div className="campaign-workspace">
     <button className="campaign-back-button" onClick={onBack}><Icon name="arrow-left" size={14} />Kembali ke daftar campaign</button>
+    {readOnly && <div className="campaign-archived-banner"><div><Icon name="archive" size={16} /><span><strong>Campaign ini telah diarsipkan.</strong> Detail tetap tersedia dalam mode baca saja.</span></div>{canManage && <button className="button button-soft button-sm" onClick={() => onLifecycleAction?.("unarchive")}><Icon name="restore" size={13} />Buka Arsip</button>}</div>}
     <div className="campaign-workspace-eyebrow">WORKSPACE / CAMPAIGN / DETAIL</div>
     <header className="campaign-detail-header">
       <div>
         <div className="campaign-detail-title"><h1>{campaign.name}</h1><StatusPill status={campaign.status} /></div>
-        <p>{campaign.brand}<span>•</span>{campaign.period}<span>•</span>Owner: {campaign.pic}</p>
+        <p>{campaign.brand}<span>•</span>{campaign.period}</p>
       </div>
-      <div className="campaign-detail-actions"><button className="button button-soft" onClick={shareSummary}><Icon name="share" size={14} />Bagikan ringkasan</button><button className="button button-primary" onClick={() => openDialog("brief")} disabled={!canEdit} title={!canEdit ? "Akses baca saja" : undefined}><Icon name="edit" size={14} />Edit brief</button></div>
+      <div className="campaign-detail-actions"><button className="button button-soft" onClick={shareSummary}><Icon name="share" size={14} />Bagikan ringkasan</button><button className="button button-primary" onClick={() => openDialog("info")} disabled={!canEdit} title={!canEdit ? "Akses baca saja" : undefined}><Icon name="edit" size={14} />Edit informasi</button>{canManage && <div className="campaign-action-wrap"><button className="icon-button" onClick={() => setLifecycleMenuOpen(!lifecycleMenuOpen)} aria-label="Aksi lifecycle campaign"><Icon name="more-horizontal" /></button>{lifecycleMenuOpen && <div className="campaign-action-menu detail">{readOnly ? <button onClick={() => onLifecycleAction?.("unarchive")}><Icon name="restore" size={14} />Buka Arsip</button> : <button onClick={() => onLifecycleAction?.("archive")}><Icon name="archive" size={14} />Arsipkan Campaign</button>}<button className="danger" onClick={() => { if (window.confirm(`Pindahkan ${campaign.name} ke daftar Dihapus?`)) onLifecycleAction?.("trash"); }}><Icon name="trash" size={14} />Hapus Campaign</button></div>}</div>}</div>
     </header>
 
     <nav className="campaign-tabs" role="tablist" aria-label="Detail campaign">
@@ -281,20 +301,23 @@ function CampaignWorkspaceContent({ campaign, data, identity, onBack, onNavigate
   </div>;
 }
 
-function OverviewTab({ campaign, tasks, completedTasks, taskProgress, budgetProgress, presentation, teamNames, linkedInfluencerCount, canEdit, onOpenTab, onEditBrief, onAddKpi, onAddPromo, onToggleTask, onAcknowledge }: { campaign: Campaign; tasks: Task[]; completedTasks: number; taskProgress: number; budgetProgress: number; presentation: PresentationState; teamNames: string[]; linkedInfluencerCount: number; canEdit: boolean; onOpenTab: (tab: CampaignTab) => void; onEditBrief: () => void; onAddKpi: () => void; onAddPromo: () => void; onToggleTask: (id: EntityId) => void; onAcknowledge: () => void }) {
+function OverviewTab({ campaign, tasks, completedTasks, taskProgress, budgetProgress, presentation, teamNames, linkedInfluencerCount, canEdit, onOpenTab, onEditInfo, onEditBrief, onAddKpi, onAddPromo, onToggleTask, onAcknowledge }: { campaign: Campaign; tasks: Task[]; completedTasks: number; taskProgress: number; budgetProgress: number; presentation: PresentationState; teamNames: string[]; linkedInfluencerCount: number; canEdit: boolean; onOpenTab: (tab: CampaignTab) => void; onEditInfo: () => void; onEditBrief: () => void; onAddKpi: () => void; onAddPromo: () => void; onToggleTask: (id: EntityId) => void; onAcknowledge: () => void }) {
   const activePhase = presentation.phases.find((phase) => phase.status === "Berjalan" || phase.status === "Aktif") || presentation.phases[0];
   const pendingTasks = tasks.filter((task) => task.status !== "Done");
   const hasStoredKpi = Boolean(campaign.kpi && campaign.kpi !== "Belum ditentukan");
+  const kpiCount = presentation.kpis.length + (hasStoredKpi ? 1 : 0);
+  const hasBudgetData = campaign.budget > 0 || campaign.spent > 0;
   return <div className="campaign-tab-stack">
+    {!campaign.startDate && !campaign.endDate && <div className="campaign-period-prompt"><div><Icon name="calendar" size={15} /><span><strong>Periode belum ditentukan</strong>Atur tanggal mulai dan selesai saat jadwal sudah tersedia.</span></div>{canEdit && <button className="button button-soft button-sm" onClick={onEditInfo}>Atur periode</button>}</div>}
     <section className="card campaign-big-message">
-      {presentation.bigMessage ? <><div className="campaign-card-row"><div className="campaign-subheading">PESAN UTAMA CAMPAIGN</div><PresentationBadge /></div>{presentation.tagline && <span className="campaign-tagline">{presentation.tagline}</span>}<h2>{presentation.bigMessage}</h2><p>{presentation.intro || "Gambaran umum belum dilengkapi."}</p><div className="campaign-big-meta"><span><Icon name="calendar" size={13} />{campaign.period}</span><span><Icon name="target" size={13} />{presentation.kpis.length + (hasStoredKpi ? 1 : 0)} target KPI</span><span><Icon name="users" size={13} />{teamNames.length} anggota terlibat</span></div></> : <EmptyCampaignState icon="book" title="Big message belum tersedia" description="Lengkapi pesan utama agar seluruh anggota tim memiliki arah komunikasi yang sama." action={canEdit ? <button className="button button-soft button-sm" onClick={onEditBrief}><Icon name="edit" size={13} />Lengkapi brief</button> : undefined} />}
+      {presentation.bigMessage ? <><div className="campaign-card-row"><div className="campaign-subheading">PESAN UTAMA CAMPAIGN</div><PresentationBadge /></div>{presentation.tagline && <span className="campaign-tagline">{presentation.tagline}</span>}<h2>{presentation.bigMessage}</h2><p>{presentation.intro || campaign.objective || "Gambaran umum belum dilengkapi."}</p><div className="campaign-big-meta"><span><Icon name="calendar" size={13} />{campaign.period}</span><span><Icon name="target" size={13} />{presentation.kpis.length + (hasStoredKpi ? 1 : 0)} target KPI</span><span><Icon name="users" size={13} />{teamNames.length} anggota terlibat</span></div></> : <EmptyCampaignState icon="book" title="Brief belum dibuat" description={campaign.objective ? `Tujuan singkat: ${campaign.objective}` : "Lengkapi brief agar seluruh anggota tim memiliki arah komunikasi yang sama."} action={canEdit ? <button className="button button-soft button-sm" onClick={onEditBrief}><Icon name="edit" size={13} />Tambah brief</button> : undefined} />}
     </section>
 
     <section className="campaign-stat-grid">
-      <CampaignStatCard icon="check-square" label="Progres tugas" value={`${completedTasks}/${tasks.length}`} note={`${taskProgress}% tugas selesai`} tone="green" />
-      <CampaignStatCard icon="target" label="Target KPI" value={`${presentation.kpis.length + (hasStoredKpi ? 1 : 0)}`} note={`${hasStoredKpi ? 1 : 0} target existing + KPI presentasi`} />
-      <CampaignStatCard icon="wallet" label="Penggunaan budget" value={`${budgetProgress}%`} note={`${rupiah(campaign.spent)} tersimpan`} tone="amber" />
-      <CampaignStatCard icon="film" label="Konten & KOL" value={`${linkedInfluencerCount}`} note="Jadwal influencer terhubung" tone="blue" />
+      <CampaignStatCard icon="check-square" label="Progres tugas" value={tasks.length ? `${completedTasks}/${tasks.length}` : "Belum ada"} note={tasks.length ? `${taskProgress}% tugas selesai` : "Progress belum dihitung"} tone="green" />
+      <CampaignStatCard icon="target" label="Target KPI" value={kpiCount ? `${kpiCount}` : "Belum ada"} note={kpiCount ? `${kpiCount} target tersimpan` : "Tambahkan target KPI"} />
+      <CampaignStatCard icon="wallet" label="Penggunaan budget" value={hasBudgetData ? `${budgetProgress}%` : "Belum diatur"} note={hasBudgetData ? `${rupiah(campaign.spent)} tersimpan` : "Atur di tab Keuangan"} tone="amber" />
+      <CampaignStatCard icon="film" label="Konten & KOL" value={linkedInfluencerCount ? `${linkedInfluencerCount}` : "Belum ada"} note={linkedInfluencerCount ? "Jadwal influencer terhubung" : "Tambahkan konten atau KOL"} tone="blue" />
     </section>
 
     <div className="campaign-overview-grid">
@@ -305,12 +328,12 @@ function OverviewTab({ campaign, tasks, completedTasks, taskProgress, budgetProg
         </section>
         <section className="card">
           <CampaignSectionHeader icon="target" title="Target & KPI" description="Progress KPI dipisahkan dari progres tugas." action={canEdit ? <button className="button button-soft button-sm" onClick={onAddKpi}><Icon name="plus" size={12} />Tambah KPI</button> : undefined} />
-          {hasStoredKpi ? <CampaignKpiRow name="Target utama tersimpan" valueLabel={campaign.kpi} source="Sumber: field KPI Campaign existing" /> : <EmptyCampaignState icon="target" title="Target KPI belum ditentukan" description="Tambahkan target yang terukur agar progres campaign dapat dievaluasi." />}
+          {hasStoredKpi ? <CampaignKpiRow name="Target utama tersimpan" valueLabel={campaign.kpi} source="Sumber: field KPI Campaign existing" /> : <EmptyCampaignState icon="target" title="Belum ada target KPI" description="Tambahkan target yang terukur agar progres campaign dapat dievaluasi." action={canEdit ? <button className="button button-soft button-sm" onClick={onAddKpi}><Icon name="plus" size={12} />Tambah KPI</button> : undefined} />}
           {presentation.kpis.slice(0, 2).map((kpi) => <CampaignKpiRow key={kpi.id} name={kpi.name} valueLabel={`${formatUnit(kpi.current, kpi.unit)} / ${formatUnit(kpi.target, kpi.unit)}`} progress={(kpi.current / kpi.target) * 100} source="Draf tampilan sementara" />)}
         </section>
         <section className="card">
           <CampaignSectionHeader icon="check-square" title="Prioritas pekerjaan" description="Tugas diambil langsung dari modul To-Do." action={<button className="button button-soft button-sm" onClick={() => onOpenTab("timeline")}>Semua tugas <Icon name="arrow-right" size={12} /></button>} />
-          {pendingTasks.length ? pendingTasks.slice(0, 3).map((task) => <CampaignTaskRow key={task.id} task={task} readOnly={!canEdit} onToggle={() => onToggleTask(task.id)} />) : <EmptyCampaignState icon="check-square" title={tasks.length ? "Semua tugas sudah selesai" : "Belum ada tugas"} description={tasks.length ? "Tidak ada pekerjaan tertunda pada campaign ini." : "Tambahkan tugas dari tab Timeline & Tugas agar pekerjaan memiliki PIC dan tenggat."} />}
+          {pendingTasks.length ? pendingTasks.slice(0, 3).map((task) => <CampaignTaskRow key={task.id} task={task} readOnly={!canEdit} onToggle={() => onToggleTask(task.id)} />) : <EmptyCampaignState icon="check-square" title={tasks.length ? "Semua tugas sudah selesai" : "Belum ada tugas"} description={tasks.length ? "Tidak ada pekerjaan tertunda pada campaign ini." : "Tambahkan tugas dari tab Timeline & Tugas agar pekerjaan memiliki PIC dan tenggat."} action={canEdit && !tasks.length ? <button className="button button-soft button-sm" onClick={() => onOpenTab("timeline")}><Icon name="plus" size={12} />Buat tugas pertama</button> : undefined} />}
         </section>
       </div>
 
@@ -320,8 +343,8 @@ function OverviewTab({ campaign, tasks, completedTasks, taskProgress, budgetProg
           {presentation.promos.length ? presentation.promos.slice(0, 2).map((promo) => <PromoCard key={promo.id} promo={promo} />) : <EmptyCampaignState icon="campaign" title="Promo belum disusun" description="Tambahkan periode, mekanisme, kuota, dan status persetujuan promo." />}
         </section>
         <section className="card">
-          <CampaignSectionHeader icon="users" title="Tim campaign" description={`${teamNames.length} orang terlibat dari owner dan PIC tugas.`} />
-          <div className="campaign-team-list">{teamNames.map((name, index) => <div key={name}><Avatar name={name} tone={index % 3 === 1 ? "green" : index % 3 === 2 ? "orange" : "purple"} /><span><strong>{name}</strong><small>{name === campaign.pic ? "Campaign owner" : "PIC tugas"}</small></span></div>)}</div>
+          <CampaignSectionHeader icon="users" title="Tim campaign" description={`${teamNames.length} orang terlibat sebagai PIC tugas.`} />
+          {teamNames.length ? <div className="campaign-team-list">{teamNames.map((name, index) => <div key={name}><Avatar name={name} tone={index % 3 === 1 ? "green" : index % 3 === 2 ? "orange" : "purple"} /><span><strong>{name}</strong><small>PIC tugas</small></span></div>)}</div> : <EmptyCampaignState icon="users" title="Belum ada anggota terlibat" description="Tim akan muncul setelah tugas memiliki PIC." />}
           <div className="campaign-divider" />
           <div className="campaign-subheading">KONFIRMASI BRIEF</div>
           <p className="campaign-body-copy">Konfirmasi ini hanya disimpan pada sesi tampilan sampai tabel acknowledgment tersedia.</p>
@@ -338,13 +361,14 @@ function OverviewTab({ campaign, tasks, completedTasks, taskProgress, budgetProg
 
 function BriefPromoTab({ campaign, presentation, canEdit, onEditBrief, onAddPromo, onAddReference }: { campaign: Campaign; presentation: PresentationState; canEdit: boolean; onEditBrief: () => void; onAddPromo: () => void; onAddReference: () => void }) {
   const hasBrief = Boolean(presentation.bigMessage || presentation.intro || presentation.tagline);
+  const hasStoredKpi = Boolean(campaign.kpi && campaign.kpi !== "Belum ditentukan");
   return <div className="campaign-tab-stack">
     <div className="campaign-section-intro"><div><h2>Brief campaign</h2><p>Susun konteks campaign agar tim dapat bekerja tanpa instruksi yang tersebar.</p></div><PresentationBadge>Belum tersimpan ke backend</PresentationBadge></div>
     <div className="campaign-brief-grid">
       <div className="campaign-tab-stack">
         <section className="card">
           <CampaignSectionHeader icon="book" title="Brief utama" action={canEdit ? <button className="button button-soft button-sm" onClick={onEditBrief}><Icon name="edit" size={12} />{hasBrief ? "Edit brief" : "Lengkapi brief"}</button> : undefined} />
-          {hasBrief ? <div className="campaign-brief-content"><div className="campaign-subheading">TAGLINE</div><h3>{presentation.tagline || "Belum ditentukan"}</h3><div className="campaign-subheading">BIG MESSAGE</div><h4>{presentation.bigMessage}</h4><div className="campaign-subheading">INTRO / GAMBARAN UMUM</div><p>{presentation.intro || "Belum dilengkapi."}</p><div className="campaign-divider" /><div className="campaign-subheading">ALUR PENGERJAAN</div>{presentation.steps.length ? presentation.steps.map((step, index) => <div className="campaign-step" key={`${step}-${index}`}><span>{String(index + 1).padStart(2, "0")}</span><p>{step}</p></div>) : <p className="campaign-muted-copy">Langkah pengerjaan belum disusun.</p>}</div> : <EmptyCampaignState icon="book" title="Brief utama belum lengkap" description={`Target existing “${campaign.kpi}” tetap tersedia, tetapi belum ada tagline, big message, atau gambaran umum.`} action={canEdit ? <button className="button button-primary button-sm" onClick={onEditBrief}><Icon name="plus" size={12} />Tulis brief</button> : undefined} />}
+          {hasBrief ? <div className="campaign-brief-content"><div className="campaign-subheading">TAGLINE</div><h3>{presentation.tagline || "Belum ditentukan"}</h3><div className="campaign-subheading">BIG MESSAGE</div><h4>{presentation.bigMessage}</h4><div className="campaign-subheading">INTRO / GAMBARAN UMUM</div><p>{presentation.intro || "Belum dilengkapi."}</p><div className="campaign-divider" /><div className="campaign-subheading">ALUR PENGERJAAN</div>{presentation.steps.length ? presentation.steps.map((step, index) => <div className="campaign-step" key={`${step}-${index}`}><span>{String(index + 1).padStart(2, "0")}</span><p>{step}</p></div>) : <p className="campaign-muted-copy">Langkah pengerjaan belum disusun.</p>}</div> : <EmptyCampaignState icon="book" title="Brief utama belum lengkap" description={hasStoredKpi ? `Target existing “${campaign.kpi}” tetap tersedia, tetapi belum ada tagline, big message, atau gambaran umum.` : "Belum ada tagline, big message, gambaran umum, maupun target KPI."} action={canEdit ? <button className="button button-primary button-sm" onClick={onEditBrief}><Icon name="plus" size={12} />Tulis brief</button> : undefined} />}
         </section>
         <section className="card">
           <CampaignSectionHeader icon="image" title="Referensi kreatif" description="Link gambar, moodboard, atau dokumen acuan." action={canEdit ? <button className="button button-soft button-sm" onClick={onAddReference}><Icon name="plus" size={12} />Tambah referensi</button> : undefined} />
@@ -412,6 +436,7 @@ function ContentInfluencerTab({ linkedInfluencers, brandContent, filter, onFilte
 function FinanceTab({ campaign, transactionCandidates, onNavigate }: { campaign: Campaign; transactionCandidates: AppData["transactions"]; onNavigate: (view: string) => void }) {
   const remaining = Math.max(campaign.budget - campaign.spent, 0);
   const percentage = campaign.budget ? Math.round((campaign.spent / campaign.budget) * 100) : 0;
+  if (!campaign.budget && !campaign.spent) return <div className="campaign-tab-stack"><div className="campaign-section-intro"><div><h2>Budget campaign</h2><p>Rencana anggaran dan realisasi dapat dilengkapi setelah Campaign dibuat.</p></div></div><section className="card"><EmptyCampaignState icon="wallet" title="Budget belum ditentukan" description="Atur rencana dan transaksi Campaign melalui modul Mitra & Keuangan." action={<button className="button button-primary" onClick={() => onNavigate("partners")}><Icon name="external" size={14} />Atur budget</button>} /></section></div>;
   return <div className="campaign-tab-stack">
     <div className="campaign-section-intro"><div><h2>Budget campaign</h2><p>Ringkasan menggunakan budget dan spent yang sudah tersimpan pada Campaign.</p></div><button className="button button-primary" onClick={() => onNavigate("partners")}><Icon name="external" size={14} />Buka Mitra & Keuangan</button></div>
     <section className="campaign-stat-grid"><CampaignStatCard icon="wallet" label="Total anggaran" value={rupiah(campaign.budget)} note="Pagu tersimpan di Campaign" /><CampaignStatCard icon="chart" label="Realisasi" value={rupiah(campaign.spent)} note="Kolom spent Campaign existing" tone="amber" /><CampaignStatCard icon="wallet" label="Sisa anggaran" value={rupiah(remaining)} note="Budget dikurangi spent" tone="green" /><CampaignStatCard icon="target" label="Persentase terpakai" value={`${percentage}%`} note="Belum berasal dari transaksi" tone="blue" /></section>
@@ -472,6 +497,7 @@ function DiscussionTab({ identity, presentation, replyTo, canEdit, onReply, onUp
 function CampaignDialog({ type, campaign, data, presentation, error, onClose, onSubmit }: { type: CampaignDialogType; campaign: Campaign; data: AppData; presentation: PresentationState; error: string; onClose: () => void; onSubmit: (event: FormEvent<HTMLFormElement>) => void }) {
   const dialogRef = useRef<HTMLElement>(null);
   const info: Record<CampaignDialogType, { title: string; description: string }> = {
+    info: { title: "Edit informasi Campaign", description: "Perbarui informasi dasar tanpa mengubah PIC tugas atau data operasional lain." },
     brief: { title: "Lengkapi brief campaign", description: "Draf ini hanya dipakai untuk review UI dan belum disimpan ke Supabase." },
     kpi: { title: "Tambah KPI", description: "Gunakan target numerik agar progres dapat dibaca dengan jelas." },
     promo: { title: "Tambah promo", description: "Lengkapi periode dan mekanisme agar tidak menimbulkan interpretasi berbeda." },
@@ -514,11 +540,12 @@ function CampaignDialog({ type, campaign, data, presentation, error, onClose, on
     <section ref={dialogRef} className="modal campaign-detail-modal" role="dialog" aria-modal="true" aria-labelledby="campaign-dialog-title" aria-describedby="campaign-dialog-description">
       <div className="modal-head"><div><h2 id="campaign-dialog-title">{info[type].title}</h2><p id="campaign-dialog-description">{info[type].description}</p></div><button type="button" className="icon-button modal-close" onClick={onClose} aria-label="Tutup"><Icon name="close" /></button></div>
       <form onSubmit={onSubmit} className="form-stack">
+        {type === "info" && <><Field label="Nama Campaign" name="name" required defaultValue={campaign.name} placeholder="Contoh: Grand Opening RUMA Purwokerto" /><Select label="Brand" name="brand" values={campaignBrands(data, campaign.brand)} defaultValue={campaign.brand} required /><div className="campaign-form-group"><div><strong>Periode Campaign</strong><span>Opsional, kosongkan bila belum ditentukan.</span></div><div className="two-fields"><Field label="Tanggal mulai" name="startDate" type="date" defaultValue={campaign.startDate || ""} /><Field label="Tanggal selesai" name="endDate" type="date" defaultValue={campaign.endDate || ""} min={campaign.startDate || undefined} /></div></div><TextArea label="Tujuan Singkat" name="objective" defaultValue={campaign.objective} placeholder="Apa tujuan utama campaign ini?" /></>}
         {type === "brief" && <><Field label="Tagline" name="tagline" defaultValue={presentation.tagline} placeholder="Contoh: Make it Machiro" /><TextArea label="Big message" name="bigMessage" required defaultValue={presentation.bigMessage} placeholder="Pesan utama yang harus dipahami audiens" /><TextArea label="Gambaran umum" name="intro" defaultValue={presentation.intro} placeholder="Latar belakang, tujuan, dan fokus komunikasi" /><TextArea label="Alur pengerjaan" name="steps" defaultValue={presentation.steps.join("\n")} placeholder="Satu langkah per baris" /><TextArea label="Instruksi penting" name="instructions" defaultValue={presentation.instructions} placeholder="Syarat promo atau hal yang wajib dikonfirmasi" /></>}
         {type === "kpi" && <><Field label="Nama KPI" name="name" required placeholder="Contoh: Voucher redeem" /><div className="two-fields"><Field label="Realisasi" name="current" required type="number" min="0" /><Field label="Target" name="target" required type="number" min="0.01" step="any" /></div><Select label="Unit" name="unit" values={["Angka", "Persen", "Rupiah"]} /></>}
         {type === "promo" && <><Field label="Nama promo" name="title" required placeholder="Contoh: Diskon 30%" /><Field label="Periode" name="period" required placeholder="Contoh: 19–20 September" /><TextArea label="Ringkasan" name="summary" required placeholder="Manfaat utama dan sasaran promo" /><TextArea label="Mekanisme & syarat" name="detail" placeholder="Kuota, eligibility, cara klaim, dan batasan" /><Select label="Status" name="status" values={["Draf", "Review", "Disetujui", "Aktif"]} /></>}
         {type === "phase" && <><Field label="Nama fase" name="name" required placeholder="Contoh: Teaser" /><Field label="Periode" name="period" required placeholder="Contoh: 1–11 September" /><TextArea label="Tujuan fase" name="purpose" placeholder="Apa yang harus dicapai pada fase ini?" /><Select label="Status" name="status" values={["Rencana", "Berjalan", "Selesai"]} /></>}
-        {type === "task" && <><Field label="Judul tugas" name="title" required placeholder="Contoh: Finalisasi key visual" /><div className="two-fields"><Select label="PIC" name="pic" values={data.users.length ? data.users.map((user) => user.name) : [campaign.pic]} /><Field label="Tenggat" name="due" type="date" required /></div><div className="two-fields"><Select label="Prioritas" name="priority" values={["Sedang", "Tinggi", "Rendah"]} />{presentation.phaseMode && presentation.phases.length > 0 && <Select label="Fase" name="phaseId" values={presentation.phases.map((phase) => phase.id)} labels={presentation.phases.map((phase) => phase.name)} />}</div></>}
+        {type === "task" && <><Field label="Judul tugas" name="title" required placeholder="Contoh: Finalisasi key visual" /><div className="two-fields"><Select label="PIC" name="pic" values={data.users.length ? data.users.map((user) => user.name) : ["Belum ditentukan"]} /><Field label="Tenggat" name="due" type="date" required /></div><div className="two-fields"><Select label="Prioritas" name="priority" values={["Sedang", "Tinggi", "Rendah"]} />{presentation.phaseMode && presentation.phases.length > 0 && <Select label="Fase" name="phaseId" values={presentation.phases.map((phase) => phase.id)} labels={presentation.phases.map((phase) => phase.name)} />}</div></>}
         {type === "reference" && <><Field label="Judul referensi" name="title" required placeholder="Contoh: Moodboard visual" /><Field label="URL" name="url" required type="url" placeholder="https://..." /><Select label="Jenis" name="kind" values={["Link", "Gambar", "Dokumen"]} /></>}
         {error && <div className="campaign-form-error" role="alert"><Icon name="alert" size={14} />{error}</div>}
         <div className="modal-actions"><button type="button" className="button button-ghost" onClick={onClose}>Batal</button><button type="submit" className="button button-primary">Simpan perubahan</button></div>
@@ -537,7 +564,11 @@ function TextArea({ label, name, required, defaultValue, placeholder }: { label:
   return <div className="form-field"><label htmlFor={id}>{label}{required ? " *" : ""}</label><textarea id={id} className="modal-input campaign-modal-textarea" name={name} required={required} maxLength={5000} defaultValue={defaultValue} placeholder={placeholder} /></div>;
 }
 
-function Select({ label, name, values, labels }: { label: string; name: string; values: string[]; labels?: string[] }) {
+function campaignBrands(data: AppData, currentBrand: string) {
+  return Array.from(new Set([currentBrand, ...data.campaigns.map((item) => item.brand), ...data.content.map((item) => item.brand), ...data.requests.map((item) => item.brand), ...data.transactions.map((item) => item.brand)].map((brand) => brand.trim()).filter(Boolean))).sort((left, right) => left.localeCompare(right, "id"));
+}
+
+function Select({ label, name, values, labels, defaultValue, required = false }: { label: string; name: string; values: string[]; labels?: string[]; defaultValue?: string; required?: boolean }) {
   const id = `campaign-field-${name}`;
-  return <div className="form-field"><label htmlFor={id}>{label}</label><select id={id} className="modal-input" name={name}>{values.map((value, index) => <option value={value} key={value}>{labels?.[index] || value}</option>)}</select></div>;
+  return <div className="form-field"><label htmlFor={id}>{label}{required ? " *" : ""}</label><select id={id} className="modal-input" name={name} required={required} defaultValue={defaultValue || values[0]}>{values.map((value, index) => <option value={value} key={value}>{labels?.[index] || value}</option>)}</select></div>;
 }

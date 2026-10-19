@@ -117,6 +117,8 @@ export async function POST(request: NextRequest) {
       status: campaign.status,
       progress: campaign.progress,
       owner_id: user.id,
+      created_by: user.id,
+      updated_by: user.id,
       start_date: `2026-${index === 3 ? "07" : "08"}-01`,
       end_date: `2026-${index === 0 || index === 3 ? "08-31" : "09-30"}`,
     }));

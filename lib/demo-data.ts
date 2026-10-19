@@ -3,10 +3,10 @@ import { demoAccount } from "./demo-account";
 
 export const demoData: AppData = {
   campaigns: [
-    { id: 1, name: "Meriahkan Kemerdekaan", brand: "HBI", pic: "Andi Saputra", period: "01 Agu — 31 Agu 2026", status: "Berjalan", progress: 78, budget: 12500000, spent: 9800000, kpi: "Reach 1,2 jt", tasks: 12, content: 8 },
-    { id: 2, name: "Grand Opening BSD", brand: "HokBen", pic: "Rani Putri", period: "10 Agu — 15 Sep 2026", status: "Berjalan", progress: 52, budget: 8000000, spent: 4200000, kpi: "Leads 300", tasks: 8, content: 5 },
-    { id: 3, name: "Weekend Treats", brand: "HokBen", pic: "Dimas Arya", period: "15 Agu — 30 Sep 2026", status: "Rencana", progress: 19, budget: 5000000, spent: 850000, kpi: "Sales 15%", tasks: 5, content: 3 },
-    { id: 4, name: "Loyalty Member Push", brand: "HBI", pic: "Sinta Dewi", period: "01 Jul — 31 Agu 2026", status: "Hampir selesai", progress: 91, budget: 6500000, spent: 6100000, kpi: "Members 2k", tasks: 14, content: 10 },
+    { id: 1, name: "Meriahkan Kemerdekaan", brand: "HBI", objective: "Meningkatkan awareness momentum kemerdekaan.", startDate: "2026-08-01", endDate: "2026-08-31", period: "01 Agu — 31 Agu 2026", status: "Berjalan", progress: 78, budget: 12500000, spent: 9800000, kpi: "Reach 1,2 jt", tasks: 12, content: 8, lifecycleStatus: "active" },
+    { id: 2, name: "Grand Opening BSD", brand: "HokBen", objective: "Mendukung pembukaan outlet baru BSD.", startDate: "2026-08-10", endDate: "2026-09-15", period: "10 Agu — 15 Sep 2026", status: "Berjalan", progress: 52, budget: 8000000, spent: 4200000, kpi: "Leads 300", tasks: 8, content: 5, lifecycleStatus: "active" },
+    { id: 3, name: "Weekend Treats", brand: "HokBen", objective: "Mendorong transaksi pada akhir pekan.", startDate: "2026-08-15", endDate: "2026-09-30", period: "15 Agu — 30 Sep 2026", status: "Rencana", progress: 19, budget: 5000000, spent: 850000, kpi: "Sales 15%", tasks: 5, content: 3, lifecycleStatus: "active" },
+    { id: 4, name: "Loyalty Member Push", brand: "HBI", objective: "Meningkatkan aktivasi member loyalti.", startDate: "2026-07-01", endDate: "2026-08-31", period: "01 Jul — 31 Agu 2026", status: "Hampir selesai", progress: 91, budget: 6500000, spent: 6100000, kpi: "Members 2k", tasks: 14, content: 10, lifecycleStatus: "active" },
   ],
   tasks: [
     { id: 1, title: "Finalisasi key visual Kemerdekaan", brand: "HBI", pic: "Rani Putri", due: "Hari ini", priority: "Tinggi", status: "Review", campaign: 1 },

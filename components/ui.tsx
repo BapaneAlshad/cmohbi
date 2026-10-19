@@ -4,13 +4,13 @@ import {
   AlertTriangle, ArrowLeft, ArrowRight, BarChart3, Bell, BookOpen, CalendarDays,
   Check, CheckSquare2, ChevronLeft, ChevronRight, Circle, CircleDollarSign, Clock3,
   Download, Edit3, ExternalLink, Eye, Film, Filter, Handshake, Home, Image as ImageIcon,
-  Info, Instagram, Layers3, LayoutPanelLeft, Link2, LogOut, Menu, MessageSquare,
+  Archive, Info, Instagram, Layers3, LayoutPanelLeft, Link2, LogOut, Menu, MessageSquare,
   Megaphone, Moon, MoreHorizontal, Paperclip, Pin, Plus, Reply, Search, Send, Share2,
-  Sparkles, Sun, Target, Users, X, type LucideIcon,
+  RotateCcw, Sparkles, Sun, Target, Trash2, Users, X, type LucideIcon,
 } from "lucide-react";
 
 const icons: Record<string, LucideIcon> = {
-  alert: AlertTriangle, "arrow-left": ArrowLeft, "arrow-right": ArrowRight,
+  alert: AlertTriangle, archive: Archive, "arrow-left": ArrowLeft, "arrow-right": ArrowRight,
   bell: Bell, book: BookOpen, calendar: CalendarDays, campaign: Megaphone,
   check: Check, "check-square": CheckSquare2, "chevron-left": ChevronLeft,
   "chevron-right": ChevronRight, chart: BarChart3, circle: Circle, close: X,
@@ -20,7 +20,7 @@ const icons: Record<string, LucideIcon> = {
   message: MessageSquare, moon: Moon, "more-horizontal": MoreHorizontal,
   panel: LayoutPanelLeft, paperclip: Paperclip, pin: Pin, plus: Plus, reply: Reply,
   search: Search, send: Send, share: Share2, sparkles: Sparkles, sun: Sun,
-  target: Target, users: Users, wallet: CircleDollarSign, clock: Clock3,
+  restore: RotateCcw, target: Target, trash: Trash2, users: Users, wallet: CircleDollarSign, clock: Clock3,
 };
 
 export function Icon({ name, size = 16, className }: { name: string; size?: number; className?: string }) {
@@ -33,16 +33,17 @@ export function Avatar({ name, tone = "purple" }: { name: string; tone?: string 
   return <span className={`avatar avatar-${tone}`}>{initials}</span>;
 }
 
-export function StatusPill({ status }: { status: string }) {
+export function StatusPill({ status, className = "" }: { status: string; className?: string }) {
   const statusClass: Record<string, string> = {
     Berjalan: "status-active", Selesai: "status-done", Rencana: "status-plan",
     "Hampir selesai": "status-progress", "In Progress": "status-progress", Review: "status-review",
     Revisi: "status-revise", Done: "status-done", "To Do": "status-plan", Backlog: "status-review",
     Baru: "status-review", Diproses: "status-progress", Disetujui: "status-done", Draf: "status-review",
     Tayang: "status-active", Aktif: "status-active", "Belum Dibayar": "status-revise",
-    "Sudah Dibayar": "status-done", Terhubung: "status-done", "Perlu perhatian": "status-revise",
+    "Sudah Dibayar": "status-done", Terhubung: "status-done", "Perlu perhatian": "status-revise", "Butuh perhatian": "status-revise",
+    Diarsipkan: "status-archived", Dihapus: "status-trashed",
   };
-  return <span className={`status-pill ${statusClass[status] ?? "status-review"}`}>{status}</span>;
+  return <span className={`status-pill ${statusClass[status] ?? "status-review"} ${className}`.trim()}>{status}</span>;
 }
 
 export function PriorityPill({ priority }: { priority: string }) {

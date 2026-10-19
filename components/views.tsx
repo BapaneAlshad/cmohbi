@@ -13,10 +13,14 @@ type CommonProps = {
   openResetPin?: (user: AppData["users"][number]) => void;
   navigate: (view: string) => void;
   notify: (message: string) => void;
+  notifyAction?: (message: string, actionLabel: string, action: () => void) => void;
   setData: React.Dispatch<React.SetStateAction<AppData>>;
   getAccessToken?: () => Promise<string | null>;
   refreshData?: () => Promise<void>;
   liveMode?: boolean;
+  campaignLifecycleAction?: (campaignId: EntityId, action: "archive" | "unarchive" | "trash" | "restore" | "permanent-delete", pin?: string) => Promise<void>;
+  requestedCampaignId?: string | null;
+  onCampaignOpened?: () => void;
 };
 
 function PrimaryAction({ onClick, children }: { onClick: () => void; children: React.ReactNode }) {
@@ -24,7 +28,7 @@ function PrimaryAction({ onClick, children }: { onClick: () => void; children: R
 }
 
 function CampaignRow({ campaign }: { campaign: AppData["campaigns"][number] }) {
-  return <div className="campaign-row"><div className="campaign-brand">{campaign.brand === "HBI" ? "H" : "HB"}</div><div className="campaign-copy"><strong>{campaign.name}</strong><span>{campaign.brand} · {campaign.status}</span></div><div className="campaign-progress-wrap"><div className="progress-track"><span style={{ width: `${campaign.progress}%` }} /></div><div className="progress-meta"><span>{campaign.progress}% selesai</span><span>{campaign.kpi}</span></div></div><div className="campaign-budget"><strong>{rupiah(campaign.budget - campaign.spent)}</strong><span>sisa budget</span></div></div>;
+  return <div className="campaign-row"><div className="campaign-brand">{campaign.brand === "HBI" ? "H" : "HB"}</div><div className="campaign-copy"><strong>{campaign.name}</strong><span>{campaign.brand} · {campaign.status}</span></div><div className="campaign-progress-wrap"><div className={`progress-track ${campaign.tasks ? "" : "empty"}`}><span style={{ width: campaign.tasks ? `${campaign.progress}%` : "0%" }} /></div><div className="progress-meta"><span>{campaign.tasks ? `${campaign.progress}% selesai` : "Belum ada tugas"}</span><span>{campaign.kpi || "KPI belum ditentukan"}</span></div></div><div className="campaign-budget"><strong>{campaign.budget ? rupiah(campaign.budget - campaign.spent) : "Belum diatur"}</strong><span>sisa budget</span></div></div>;
 }
 
 function dashboardGreeting(date: Date) {
@@ -41,7 +45,8 @@ function dashboardDate(date: Date) {
 
 export function DashboardView({ data, navigate, identity }: CommonProps) {
   const [clock, setClock] = useState({ greeting: "Selamat pagi", date: "Hari ini" });
-  const active = data.campaigns.filter((item) => item.status === "Berjalan").length;
+  const activeCampaigns = data.campaigns.filter((item) => (item.lifecycleStatus || "active") === "active");
+  const active = activeCampaigns.filter((item) => item.status === "Berjalan").length;
   const pending = data.tasks.filter((item) => item.status !== "Done").length;
   const latest = latestByPlatform(data);
   const followers = Object.values(latest).reduce((sum, item) => sum + (item?.followers ?? 0), 0);
@@ -61,13 +66,13 @@ export function DashboardView({ data, navigate, identity }: CommonProps) {
     <div className="dashboard-toolbar"><strong className="dashboard-greeting">{clock.greeting}, {accountName}</strong><span className="date-chip"><Icon name="calendar" size={14} />{clock.date}</span></div>
     <section className="hero-panel"><div className="hero-copy"><div className="eyebrow">Ringkasan hari ini</div><h2>Tim kamu punya {pending} tugas yang perlu perhatian.</h2><p>Campaign, konten, dan performa sosial media tersaji dalam satu workspace.</p></div><div className="hero-illustration"><div className="hero-orb" /><div className="hero-person" /><div className="hero-board"><i /><i /><i /></div></div></section>
     <section className="stats-grid">
-      <StatCard label="Campaign aktif" value={`${active} / ${data.campaigns.length}`} note="12% dari bulan lalu" progress={68} icon="campaign" />
+      <StatCard label="Campaign aktif" value={`${active} / ${activeCampaigns.length}`} note="12% dari bulan lalu" progress={68} icon="campaign" />
       <StatCard label="Tugas tertunda" value={`${pending} tugas`} note="4 perlu perhatian" progress={42} icon="check-square" tone="orange" />
       <StatCard label="Akun sosial" value={`${data.socialAccounts.length} platform`} note="2 tersinkron hari ini" progress={72} icon="users" tone="blue" />
       <StatCard label="Butuh approval" value="3 item" note="2 item baru hari ini" progress={56} icon="alert" tone="coral" />
     </section>
     <section className="dashboard-grid">
-      <div className="card"><div className="card-header"><div><h2 className="card-title">Progres Campaign</h2><p className="card-subtitle">Campaign yang sedang berjalan</p></div><button className="link-button" onClick={() => navigate("campaigns")}>Kelola campaign ↗</button></div>{data.campaigns.slice(0, 3).map((campaign) => <CampaignRow campaign={campaign} key={campaign.id} />)}</div>
+      <div className="card"><div className="card-header"><div><h2 className="card-title">Progres Campaign</h2><p className="card-subtitle">Campaign yang sedang berjalan</p></div><button className="link-button" onClick={() => navigate("campaigns")}>Kelola campaign ↗</button></div>{activeCampaigns.slice(0, 3).map((campaign) => <CampaignRow campaign={campaign} key={campaign.id} />)}</div>
       <div className="card social-card"><div className="card-header"><div><h2 className="card-title">KPI Sosial Media</h2><p className="card-subtitle">Instagram, Facebook, Threads, dan TikTok</p></div><button className="link-button" onClick={() => navigate("analytics")}>Lihat analitik ↗</button></div>
         <MetricRow label="Followers" value={compact(followers)} target="320K" positive change="+4,8%" />
         <MetricRow label="Reach" value={compact(reach)} target="750K" positive change="+12,4%" />
@@ -86,31 +91,114 @@ function displayDate(value: string) {
   return new Intl.DateTimeFormat("id-ID", { day: "2-digit", month: "short", year: "numeric" }).format(new Date(`${value}T00:00:00`));
 }
 
-export function CampaignsView({ data, identity, openModal, navigate, notify, setData }: CommonProps) {
+const campaignMonths: Record<string, number> = { jan: 0, feb: 1, mar: 2, apr: 3, mei: 4, jun: 5, jul: 6, agu: 7, sep: 8, okt: 9, nov: 10, des: 11 };
+
+function startOfDay(value: Date) {
+  return new Date(value.getFullYear(), value.getMonth(), value.getDate());
+}
+
+function parseTaskDeadline(task: AppData["tasks"][number]) {
+  if (task.dueDate && /^\d{4}-\d{2}-\d{2}$/.test(task.dueDate)) return new Date(`${task.dueDate}T00:00:00`);
+  const due = task.due.trim().toLowerCase();
+  const today = startOfDay(new Date());
+  if (due === "hari ini") return today;
+  if (due === "besok") return new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
+  const match = due.match(/^(\d{1,2})\s+([a-z]+)/);
+  const month = match ? campaignMonths[match[2].slice(0, 3)] : undefined;
+  if (match && month !== undefined) return new Date(today.getFullYear(), month, Number(match[1]));
+  return null;
+}
+
+function campaignDeadline(tasks: AppData["tasks"][number][]) {
+  const datedTasks = tasks.map((task) => ({ task, date: parseTaskDeadline(task) })).filter((item): item is { task: AppData["tasks"][number]; date: Date } => item.date !== null).sort((left, right) => left.date.getTime() - right.date.getTime());
+  if (!datedTasks.length) return { label: "Belum ada", meta: "Deadline belum tersedia", tone: "muted" };
+  const today = startOfDay(new Date());
+  const next = datedTasks.find((item) => item.date >= today) || datedTasks[datedTasks.length - 1];
+  const dayDiff = Math.round((startOfDay(next.date).getTime() - today.getTime()) / 86_400_000);
+  const dateLabel = new Intl.DateTimeFormat("id-ID", { day: "2-digit", month: "short" }).format(next.date);
+  if (dayDiff < 0) return { label: "Terlambat", meta: dateLabel, tone: "danger" };
+  if (dayDiff === 0) return { label: "Hari ini", meta: dateLabel, tone: "warning" };
+  if (dayDiff === 1) return { label: "Besok", meta: dateLabel, tone: "warning" };
+  return { label: dateLabel, meta: `${dayDiff} hari lagi`, tone: "muted" };
+}
+
+function activeCampaignPhase(status: string) {
+  const phaseByStatus: Record<string, string> = { Rencana: "Persiapan", Berjalan: "Eksekusi", "Hampir selesai": "Finalisasi", "Butuh perhatian": "Perlu tindak lanjut", Selesai: "Penutupan" };
+  return phaseByStatus[status] || null;
+}
+
+export function CampaignsView({ data, identity, openModal, navigate, notify, notifyAction, setData, campaignLifecycleAction, requestedCampaignId, onCampaignOpened }: CommonProps) {
   const [selectedCampaignId, setSelectedCampaignId] = useState<EntityId | null>(null);
   const [filters, setFilters] = useState({ status: "Semua", brand: "Semua" });
+  const [section, setSection] = useState<"active" | "archived" | "trashed">("active");
+  const [menuId, setMenuId] = useState<EntityId | null>(null);
+  const [dialog, setDialog] = useState<{ type: "trash" | "restore" | "permanent"; campaign: AppData["campaigns"][number] } | null>(null);
+  const [pending, setPending] = useState(false);
+  const [dialogError, setDialogError] = useState("");
   const selectedCampaign = selectedCampaignId === null ? undefined : data.campaigns.find((campaign) => String(campaign.id) === String(selectedCampaignId));
-  const statuses = ["Semua", ...Array.from(new Set(data.campaigns.map((campaign) => campaign.status)))];
-  const brands = ["Semua", ...Array.from(new Set(data.campaigns.map((campaign) => campaign.brand)))];
-  const filtered = data.campaigns.filter((campaign) => (filters.status === "Semua" || campaign.status === filters.status) && (filters.brand === "Semua" || campaign.brand === filters.brand));
+  const campaignsBySection = data.campaigns.filter((campaign) => (campaign.lifecycleStatus || "active") === section);
+  const statuses = ["Semua", ...Array.from(new Set(campaignsBySection.map((campaign) => campaign.status)))];
+  const brands = ["Semua", ...Array.from(new Set(campaignsBySection.map((campaign) => campaign.brand)))];
+  const filtered = campaignsBySection.filter((campaign) => (filters.status === "Semua" || campaign.status === filters.status) && (filters.brand === "Semua" || campaign.brand === filters.brand));
+  const archivedCount = data.campaigns.filter((campaign) => campaign.lifecycleStatus === "archived").length;
+  const trashedCount = data.campaigns.filter((campaign) => campaign.lifecycleStatus === "trashed").length;
+  const canManage = identity?.accessRole === "owner" || identity?.accessRole === "admin";
+  const canPermanentlyDelete = canManage && ["cmo", "super admin"].includes(String(identity?.role || "").trim().toLowerCase());
 
-  if (selectedCampaignId !== null) return <CampaignWorkspace campaign={selectedCampaign} data={data} identity={identity} error={selectedCampaign ? undefined : "Campaign yang dipilih tidak lagi tersedia."} onBack={() => setSelectedCampaignId(null)} onNavigate={navigate} setData={setData} notify={notify} />;
+  useEffect(() => {
+    if (!requestedCampaignId) return;
+    const campaign = data.campaigns.find((item) => String(item.id) === requestedCampaignId && (item.lifecycleStatus || "active") === "active");
+    if (!campaign) return;
+    setSection("active");
+    setSelectedCampaignId(campaign.id);
+    onCampaignOpened?.();
+  }, [data.campaigns, onCampaignOpened, requestedCampaignId]);
 
-  return <><PageHeading kicker="Workspace / Campaign" title="Kelola campaign" description="Pantau strategi, budget, dan progres semua campaign HBI." action={<PrimaryAction onClick={() => openModal("campaign")}>Buat campaign</PrimaryAction>} />
+  const runLifecycle = async (campaign: AppData["campaigns"][number], action: "archive" | "unarchive" | "trash" | "restore" | "permanent-delete", pin?: string) => {
+    if (!campaignLifecycleAction) return notify("Lifecycle Campaign belum tersedia.");
+    setPending(true);
+    setDialogError("");
+    try {
+      await campaignLifecycleAction(campaign.id, action, pin);
+      setDialog(null);
+      setMenuId(null);
+      if (action === "archive") {
+        const undo = () => void runLifecycle(campaign, "unarchive");
+        if (notifyAction) notifyAction("Campaign berhasil diarsipkan.", "Undo", undo);
+        else notify("Campaign berhasil diarsipkan.");
+      } else notify(action === "unarchive" ? "Campaign dikembalikan ke daftar aktif." : action === "trash" ? "Campaign dipindahkan ke daftar Dihapus." : action === "restore" ? `Campaign dipulihkan ke ${campaign.previousLifecycleStatus === "archived" ? "Arsip" : "daftar aktif"}.` : "Campaign berhasil dihapus permanen.");
+      if (selectedCampaignId !== null && action !== "unarchive") setSelectedCampaignId(null);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Perubahan lifecycle Campaign gagal.";
+      if (dialog) setDialogError(message); else notify(message);
+    } finally {
+      setPending(false);
+    }
+  };
+
+  if (selectedCampaignId !== null) return <CampaignWorkspace campaign={selectedCampaign} data={data} identity={identity} readOnly={selectedCampaign?.lifecycleStatus === "archived"} error={selectedCampaign && selectedCampaign.lifecycleStatus !== "trashed" ? undefined : "Campaign yang dihapus tidak dapat dibuka."} onBack={() => setSelectedCampaignId(null)} onNavigate={navigate} setData={setData} notify={notify} onLifecycleAction={(action) => selectedCampaign && runLifecycle(selectedCampaign, action)} />;
+
+  return <><PageHeading kicker="Workspace / Campaign" title={section === "active" ? "Kelola campaign" : section === "archived" ? "Campaign diarsipkan" : "Campaign dihapus"} description={section === "active" ? "Pantau strategi dan progres semua campaign HBI." : section === "archived" ? "Buka histori campaign dalam mode baca saja atau aktifkan kembali." : "Pulihkan campaign atau hapus permanen setelah dependency aman."} action={<div className="campaign-heading-actions"><PrimaryAction onClick={() => openModal("campaign")}>Buat campaign</PrimaryAction><div className="campaign-lifecycle-links"><button className={`button button-outline button-sm ${section === "archived" ? "active" : ""}`} onClick={() => { setSection(section === "archived" ? "active" : "archived"); setFilters({ status: "Semua", brand: "Semua" }); }}><Icon name="archive" size={14} />Campaign Diarsipkan <span>{archivedCount}</span></button><button className={`button button-outline button-sm ${section === "trashed" ? "active" : ""}`} onClick={() => { setSection(section === "trashed" ? "active" : "trashed"); setFilters({ status: "Semua", brand: "Semua" }); }}><Icon name="trash" size={14} />Campaign Dihapus <span>{trashedCount}</span></button></div></div>} />
     <div className="toolbar"><div className="toolbar-left"><span className="result-count">{filtered.length} campaign ditemukan</span><FilterSelect value={filters.status} values={statuses} onChange={(status) => setFilters((current) => ({ ...current, status }))} /><FilterSelect value={filters.brand} values={brands} onChange={(brand) => setFilters((current) => ({ ...current, brand }))} /></div>{(filters.status !== "Semua" || filters.brand !== "Semua") && <button className="button button-soft button-sm" onClick={() => setFilters({ status: "Semua", brand: "Semua" })}>Reset filter</button>}</div>
     {filtered.length ? <div className="campaign-grid">{filtered.map((campaign) => {
-      const taskCount = data.tasks.filter((task) => String(task.campaign) === String(campaign.id)).length;
+      const campaignTasks = data.tasks.filter((task) => String(task.campaign) === String(campaign.id));
+      const activeTaskCount = campaignTasks.filter((task) => task.status !== "Done").length;
       const linkedContentCount = data.influencerSchedules.filter((schedule) => schedule.campaignId != null ? String(schedule.campaignId) === String(campaign.id) : schedule.campaign === campaign.name).length;
-      return <button type="button" className="card campaign-card campaign-card-button" key={campaign.id} onClick={() => setSelectedCampaignId(campaign.id)} aria-label={`Buka detail campaign ${campaign.name}`}><div className="campaign-card-top"><div className="campaign-card-brand"><div className="campaign-brand">{campaign.brand === "HBI" ? "H" : "HB"}</div><div><h3>{campaign.name}</h3><div className="meta">{campaign.brand} · {campaign.period}</div></div></div><StatusPill status={campaign.status} /></div><div className="campaign-card-body"><div className="progress-track"><span style={{ width: `${campaign.progress}%` }} /></div><div className="progress-meta"><span>{campaign.progress}% selesai</span><span>{campaign.pic}</span></div><div className="campaign-kpis"><MiniKpi label="Budget" value={rupiah(campaign.budget)} /><MiniKpi label="Terpakai" value={rupiah(campaign.spent)} /><MiniKpi label="Tugas aktual" value={`${taskCount}`} /><MiniKpi label="Konten/KOL terkait" value={`${linkedContentCount}`} /></div></div><div className="campaign-card-footer"><span className="due-label">Target: {campaign.kpi}</span><span className="campaign-open-label">Buka workspace <Icon name="arrow-right" size={12} /></span></div></button>;
+      const phase = activeCampaignPhase(campaign.status);
+      const deadline = campaignDeadline(campaignTasks);
+      const hasTasks = campaignTasks.length > 0;
+      return <article className={`card campaign-card ${section === "trashed" ? "campaign-card-trashed" : ""}`} key={campaign.id}><div className="campaign-card-top"><div className="campaign-card-brand"><div className="campaign-brand">{campaign.brand === "HBI" ? "H" : "HB"}</div><div><h3>{campaign.name}</h3><div className="meta">{campaign.brand} · {campaign.period}</div></div></div><div className="campaign-card-controls"><StatusPill status={section === "archived" ? "Diarsipkan" : section === "trashed" ? "Dihapus" : campaign.status} className="campaign-status-chip" />{canManage && section !== "trashed" && <div className="campaign-action-wrap"><button className="icon-button campaign-more" onClick={() => setMenuId(String(menuId) === String(campaign.id) ? null : campaign.id)} aria-label={`Aksi ${campaign.name}`}><Icon name="more-horizontal" size={15} /></button>{String(menuId) === String(campaign.id) && <div className="campaign-action-menu">{section === "active" ? <button onClick={() => void runLifecycle(campaign, "archive")}><Icon name="archive" size={14} />Arsipkan Campaign</button> : <button onClick={() => void runLifecycle(campaign, "unarchive")}><Icon name="restore" size={14} />Buka Arsip</button>}<button className="danger" onClick={() => { setDialog({ type: "trash", campaign }); setDialogError(""); }}><Icon name="trash" size={14} />Hapus Campaign</button></div>}</div>}</div></div><div className="campaign-card-body">{phase && <div className="campaign-phase-line"><Icon name="layers" size={13} /><span>{section === "archived" ? "Fase terakhir" : "Fase aktif"}</span><strong>{phase}</strong></div>}<div className={`campaign-progress-block ${hasTasks ? "" : "empty"}`}><div className="campaign-progress-heading"><span>Progress campaign</span><strong>{hasTasks ? `${campaign.progress}% selesai` : "Belum ada tugas"}</strong></div><div className="progress-track"><span style={{ width: hasTasks ? `${campaign.progress}%` : "0%" }} /></div></div><div className="campaign-kpis"><MiniKpi label="Tugas aktif" value={`${activeTaskCount}`} /><MiniKpi label="Konten/KOL" value={`${linkedContentCount}`} />{section === "trashed" ? <MiniKpi label="Dihapus" value={campaign.deletedAt ? new Intl.DateTimeFormat("id-ID", { dateStyle: "medium" }).format(new Date(campaign.deletedAt)) : "Tanggal tidak tersedia"} /> : <MiniKpi label="Deadline" value={deadline.label} meta={deadline.meta} tone={deadline.tone} />}</div></div><div className="campaign-card-footer"><span className="campaign-kpi-summary"><Icon name="target" size={13} /><span><small>KPI utama</small><strong>{campaign.kpi || "Belum ditentukan"}</strong></span></span>{section === "trashed" ? <div className="campaign-trash-actions"><button className="button button-soft button-sm" onClick={() => { setDialog({ type: "restore", campaign }); setDialogError(""); }}><Icon name="restore" size={13} />Pulihkan</button>{canPermanentlyDelete && <button className="button button-danger button-sm" onClick={() => { setDialog({ type: "permanent", campaign }); setDialogError(""); }}><Icon name="trash" size={13} />Hapus Selamanya</button>}</div> : <button className="campaign-open-label" onClick={() => setSelectedCampaignId(campaign.id)}>Buka workspace <Icon name="arrow-right" size={12} /></button>}</div></article>;
     })}</div> : <div className="card campaign-list-empty"><Icon name="campaign" size={20} /><strong>Campaign tidak ditemukan</strong><p>Ubah filter atau buat campaign baru untuk mulai bekerja.</p></div>}
+    {dialog && <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget && !pending) setDialog(null); }}><section className="modal campaign-lifecycle-dialog" role="dialog" aria-modal="true" aria-labelledby="campaign-lifecycle-title"><div className="modal-head"><div><h2 id="campaign-lifecycle-title">{dialog.type === "trash" ? "Hapus Campaign?" : dialog.type === "restore" ? "Pulihkan Campaign?" : "Hapus Campaign selamanya?"}</h2><p>{dialog.type === "permanent" ? "Tindakan ini tidak dapat dibatalkan." : "Data tugas, KPI, konten, dan keuangan tetap tersimpan."}</p></div><button className="icon-button modal-close" onClick={() => setDialog(null)} disabled={pending}><Icon name="close" /></button></div><div className="campaign-dialog-name"><Icon name={dialog.type === "restore" ? "restore" : "trash"} size={17} /><div><span>Campaign</span><strong>{dialog.campaign.name}</strong></div></div>{dialog.type === "permanent" && <><div className="campaign-danger-notice"><Icon name="alert" size={16} /><span>Server akan memeriksa role CMO, PIN login, tugas, dan jadwal influencer sebelum menghapus.</span></div><div className="form-field"><label>PIN keamanan CMO</label><input className="modal-input" name="securityPin" form="permanent-delete-form" type="password" inputMode="numeric" autoComplete="current-password" pattern="[0-9]{6}" minLength={6} maxLength={6} required autoFocus /></div></>}{dialogError && <div className="auth-message" role="alert">{dialogError}</div>}<form id="permanent-delete-form" onSubmit={(event) => { event.preventDefault(); const pin = String(new FormData(event.currentTarget).get("securityPin") || ""); void runLifecycle(dialog.campaign, dialog.type === "trash" ? "trash" : dialog.type === "restore" ? "restore" : "permanent-delete", pin); }}><div className="modal-actions"><button type="button" className="button button-ghost" onClick={() => setDialog(null)} disabled={pending}>Batal</button><button type="submit" className={`button ${dialog.type === "restore" ? "button-primary" : "button-danger"}`} disabled={pending}>{pending ? "Memproses…" : dialog.type === "trash" ? "Pindahkan ke Dihapus" : dialog.type === "restore" ? "Pulihkan Campaign" : "Hapus Selamanya"}</button></div></form></section></div>}
   </>;
 }
-function MiniKpi({ label, value }: { label: string; value: string }) { return <div className="mini-kpi"><strong>{value}</strong><span>{label}</span></div>; }
+function MiniKpi({ label, value, meta, tone = "" }: { label: string; value: string; meta?: string; tone?: string }) { return <div className={`mini-kpi ${tone ? `mini-kpi-${tone}` : ""}`}><strong>{value}</strong><span>{meta || label}</span></div>; }
 
 export function TodoView({ data, openModal, setData, notify }: CommonProps) {
   const [filters, setFilters] = useState({ brand: "Semua", pic: "Semua", priority: "Semua" });
   const statuses: TaskStatus[] = ["Backlog", "To Do", "In Progress", "Review", "Revisi", "Done"];
-  const filtered = data.tasks.filter((task) => (filters.brand === "Semua" || task.brand === filters.brand) && (filters.pic === "Semua" || task.pic === filters.pic) && (filters.priority === "Semua" || task.priority === filters.priority));
+  const activeCampaignIds = new Set(data.campaigns.filter((campaign) => (campaign.lifecycleStatus || "active") === "active").map((campaign) => String(campaign.id)));
+  const filtered = data.tasks.filter((task) => (task.campaign === null || activeCampaignIds.has(String(task.campaign))) && (filters.brand === "Semua" || task.brand === filters.brand) && (filters.pic === "Semua" || task.pic === filters.pic) && (filters.priority === "Semua" || task.priority === filters.priority));
   const updateStatus = (id: EntityId, status: TaskStatus) => { setData((current) => ({ ...current, tasks: current.tasks.map((task) => task.id === id ? { ...task, status } : task) })); notify(`Status tugas dipindahkan ke ${status}.`); };
   return <><PageHeading kicker="Workspace / To-Do" title="Papan kerja tim" description="Semua tugas tersusun rapi, setiap progres terlihat jelas." action={<PrimaryAction onClick={() => openModal("task")}>Tambah tugas</PrimaryAction>} />
     <div className="toolbar"><div className="toolbar-left"><span className="result-count">Filter tugas:</span><FilterSelect value={filters.brand} values={["Semua", "HBI", "HokBen"]} onChange={(brand) => setFilters({ ...filters, brand })} /><FilterSelect value={filters.pic} values={["Semua", ...data.users.map((user) => user.name)]} onChange={(pic) => setFilters({ ...filters, pic })} /><FilterSelect value={filters.priority} values={["Semua", "Tinggi", "Sedang", "Rendah"]} onChange={(priority) => setFilters({ ...filters, priority })} /></div><button className="button button-soft button-sm" onClick={() => setFilters({ brand: "Semua", pic: "Semua", priority: "Semua" })}>Reset filter</button></div>
@@ -149,7 +237,10 @@ function influencerDate(value: string) {
 }
 
 export function InfluencerScheduleView({ data, openModal }: CommonProps) {
-  const schedules = [...data.influencerSchedules].sort((a, b) => `${a.date} ${a.time}`.localeCompare(`${b.date} ${b.time}`));
+  const activeCampaigns = data.campaigns.filter((campaign) => (campaign.lifecycleStatus || "active") === "active");
+  const activeCampaignIds = new Set(activeCampaigns.map((campaign) => String(campaign.id)));
+  const activeCampaignNames = new Set(activeCampaigns.map((campaign) => campaign.name));
+  const schedules = data.influencerSchedules.filter((schedule) => schedule.campaign === "Tanpa campaign" || (schedule.campaignId != null ? activeCampaignIds.has(String(schedule.campaignId)) : activeCampaignNames.has(schedule.campaign))).sort((a, b) => `${a.date} ${a.time}`.localeCompare(`${b.date} ${b.time}`));
   const totalRate = schedules.reduce((sum, item) => sum + item.rate, 0);
   const totalSpent = schedules.reduce((sum, item) => sum + item.spent, 0);
   const pendingSpent = totalRate - totalSpent;
@@ -214,7 +305,7 @@ function Recommendation({ title, text, onClick }: { title: string; text: string;
 export function AccountView({ data, identity = { name: "Andi Saputra", username: "andi.saputra", email: "andi@hbi.co.id", whatsapp: "+6281212345678", role: "CMO" }, openModal, openResetPin, notify }: CommonProps) {
   const initials = identity.name.split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase();
   return <><PageHeading kicker="Akun / Keamanan" title="Akun & keamanan" description="Kelola profil, tim, dan akses fitur Ngapaya." action={<button className="button button-danger" onClick={() => notify("logout")}><Icon name="log-out" size={15} />Keluar</button>} />
-    <div className="account-grid"><div className="card profile-card"><div className="profile-avatar">{initials}</div><h2>{identity.name}</h2><div className="role">{identity.role} · Full access</div><div className="profile-mail">@{identity.username}<br />{identity.email}<br />{identity.whatsapp || "Nomor WhatsApp belum diisi"}</div><button className="button button-soft button-sm" onClick={() => openModal("profile")}>Edit profil</button><div className="profile-stat"><div><strong>{data.campaigns.length}</strong><span>Campaign</span></div><div><strong>{data.tasks.filter((task) => task.status === "Done").length}</strong><span>Task selesai</span></div></div><div className="profile-actions"><button className="button button-ghost button-sm" onClick={() => openModal("password")}>Ganti PIN</button></div></div>
+    <div className="account-grid"><div className="card profile-card"><div className="profile-avatar">{initials}</div><h2>{identity.name}</h2><div className="role">{identity.role} · Full access</div><div className="profile-mail">@{identity.username}<br />{identity.email}<br />{identity.whatsapp || "Nomor WhatsApp belum diisi"}</div><button className="button button-soft button-sm" onClick={() => openModal("profile")}>Edit profil</button><div className="profile-stat"><div><strong>{data.campaigns.filter((campaign) => (campaign.lifecycleStatus || "active") === "active").length}</strong><span>Campaign aktif</span></div><div><strong>{data.tasks.filter((task) => task.status === "Done").length}</strong><span>Task selesai</span></div></div><div className="profile-actions"><button className="button button-ghost button-sm" onClick={() => openModal("password")}>Ganti PIN</button><small>PIN login CMO juga dipakai untuk verifikasi hapus permanen dan selalu divalidasi oleh server.</small></div></div>
       <div className="card"><div className="card-header"><div><h2 className="card-title">Kelola pengguna</h2><p className="card-subtitle">Atur peran, akses, dan reset PIN anggota tim.</p></div><button className="button button-primary button-sm" onClick={() => openModal("user")}><Icon name="plus" size={14} />Tambah user</button></div>{data.users.map((user, index) => <div className="permission-row" key={user.username || user.email}><div className="table-person"><Avatar name={user.name} tone={index === 1 ? "green" : "purple"} /><div className="permission-copy"><strong>{user.name}</strong><span>@{user.username} · {user.email} · {user.role}</span></div></div><div className="table-person"><StatusPill status={user.status} />{openResetPin && user.username && <button className="link-button reset-pin-button" onClick={() => openResetPin(user)}>Reset PIN</button>}</div></div>)}</div></div>
   </>;
 }
