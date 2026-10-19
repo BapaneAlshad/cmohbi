@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
+import { ClipboardEvent, FormEvent, KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
 import type { AppData, EntityId, Task, UserIdentity } from "@/lib/types";
 import { formatCampaignPeriod, validateCampaignPeriod } from "@/lib/campaign-form";
 import { Avatar, Icon, rupiah, StatusPill } from "@/components/ui";
@@ -103,6 +103,9 @@ export function CampaignWorkspace({
   onNavigate,
   setData,
   notify,
+  getAccessToken,
+  uploadMedia,
+  workspaceId,
   onLifecycleAction,
 }: {
   campaign?: Campaign;
@@ -115,20 +118,23 @@ export function CampaignWorkspace({
   onNavigate: (view: string) => void;
   setData: React.Dispatch<React.SetStateAction<AppData>>;
   notify: (message: string) => void;
+  getAccessToken?: () => Promise<string | null>;
+  uploadMedia?: (file: File, bucket?: string, prefix?: string) => Promise<string>;
+  workspaceId?: string;
   onLifecycleAction?: (action: "archive" | "unarchive" | "trash") => void;
 }) {
   if (loading) return <CampaignWorkspaceSkeleton />;
   if (error || !campaign) {
     return <div className="card campaign-state-card"><EmptyCampaignState icon="alert" title="Detail campaign tidak dapat dibuka" description={error || "Campaign mungkin sudah dihapus atau tidak tersedia di workspace ini."} action={<button className="button button-soft" onClick={onBack}><Icon name="arrow-left" size={14} />Kembali ke daftar</button>} /></div>;
   }
-  return <CampaignWorkspaceContent campaign={campaign} data={data} identity={identity} readOnly={readOnly} onBack={onBack} onNavigate={onNavigate} setData={setData} notify={notify} onLifecycleAction={onLifecycleAction} />;
+  return <CampaignWorkspaceContent campaign={campaign} data={data} identity={identity} readOnly={readOnly} onBack={onBack} onNavigate={onNavigate} setData={setData} notify={notify} getAccessToken={getAccessToken} uploadMedia={uploadMedia} workspaceId={workspaceId} onLifecycleAction={onLifecycleAction} />;
 }
 
 function CampaignWorkspaceSkeleton() {
   return <div className="campaign-skeleton" aria-label="Memuat detail campaign"><div className="campaign-skeleton-line wide" /><div className="campaign-skeleton-line short" /><div className="campaign-skeleton-tabs" /><div className="campaign-skeleton-grid"><div /><div /><div /></div></div>;
 }
 
-function CampaignWorkspaceContent({ campaign, data, identity, readOnly, onBack, onNavigate, setData, notify, onLifecycleAction }: { campaign: Campaign; data: AppData; identity?: UserIdentity; readOnly: boolean; onBack: () => void; onNavigate: (view: string) => void; setData: React.Dispatch<React.SetStateAction<AppData>>; notify: (message: string) => void; onLifecycleAction?: (action: "archive" | "unarchive" | "trash") => void }) {
+function CampaignWorkspaceContent({ campaign, data, identity, readOnly, onBack, onNavigate, setData, notify, getAccessToken, uploadMedia, workspaceId, onLifecycleAction }: { campaign: Campaign; data: AppData; identity?: UserIdentity; readOnly: boolean; onBack: () => void; onNavigate: (view: string) => void; setData: React.Dispatch<React.SetStateAction<AppData>>; notify: (message: string) => void; getAccessToken?: () => Promise<string | null>; uploadMedia?: (file: File, bucket?: string, prefix?: string) => Promise<string>; workspaceId?: string; onLifecycleAction?: (action: "archive" | "unarchive" | "trash") => void }) {
   const [activeTab, setActiveTab] = useState<CampaignTab>("overview");
   const [dialog, setDialog] = useState<CampaignDialogType | null>(null);
   const [dialogError, setDialogError] = useState("");
@@ -138,6 +144,7 @@ function CampaignWorkspaceContent({ campaign, data, identity, readOnly, onBack, 
   const [contentFilter, setContentFilter] = useState<"all" | "internal" | "influencer">("all");
   const [replyTo, setReplyTo] = useState<string | undefined>();
   const [lifecycleMenuOpen, setLifecycleMenuOpen] = useState(false);
+  const [referenceSync, setReferenceSync] = useState<"idle" | "loading" | "error">("idle");
   const canManage = identity?.accessRole === "owner" || identity?.accessRole === "admin";
   const canEdit = !readOnly && identity?.accessRole !== "viewer";
 
@@ -151,6 +158,30 @@ function CampaignWorkspaceContent({ campaign, data, identity, readOnly, onBack, 
   const teamNames = Array.from(new Set(campaignTasks.map((task) => task.pic).filter((name) => Boolean(name) && name !== "Belum ditentukan")));
   const currentPhase = presentation.phases.find((phase) => phase.id === selectedPhase) || presentation.phases[0];
   const activePhaseId = currentPhase?.id || "";
+
+  useEffect(() => {
+    let active = true;
+    if (!getAccessToken) return () => { active = false; };
+    setReferenceSync("loading");
+    void (async () => {
+      try {
+        const token = await getAccessToken();
+        if (!token) {
+          if (active) setReferenceSync("idle");
+          return;
+        }
+        const response = await fetch(`/api/campaigns/${campaign.id}/references`, { headers: { Authorization: `Bearer ${token}` } });
+        const result = await response.json() as { references?: Array<{ id: string; title: string; url: string; kind: string; start_date: string; end_date: string; mime_type?: string | null }>; error?: string };
+        if (!response.ok) throw new Error(result.error || "Referensi belum dapat dimuat.");
+        if (!active) return;
+        setPresentation((current) => ({ ...current, references: (result.references || []).map((reference) => ({ id: reference.id, title: reference.title, url: reference.url, kind: reference.kind, startDate: reference.start_date, endDate: reference.end_date, mimeType: reference.mime_type || undefined, source: "backend" as const })) }));
+        setReferenceSync("idle");
+      } catch {
+        if (active) setReferenceSync("error");
+      }
+    })();
+    return () => { active = false; };
+  }, [campaign.id, getAccessToken]);
 
   const updatePresentation = (update: (current: PresentationState) => PresentationState) => {
     if (!canEdit) return notify("Akun Viewer memiliki akses baca saja pada Campaign.");
@@ -169,7 +200,12 @@ function CampaignWorkspaceContent({ campaign, data, identity, readOnly, onBack, 
     notify("Status tugas berhasil diperbarui dan tetap menggunakan data To-Do.");
   };
 
-  const submitDialog = (event: FormEvent<HTMLFormElement>) => {
+  const uploadReferenceImage = async (file: File) => {
+    if (!uploadMedia || !workspaceId) throw new Error("Paste gambar membutuhkan koneksi Supabase aktif.");
+    return uploadMedia(file, "campaign-references", `${workspaceId}/${campaign.id}`);
+  };
+
+  const submitDialog = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setDialogError("");
     if (!dialog) return;
@@ -206,8 +242,13 @@ function CampaignWorkspaceContent({ campaign, data, identity, readOnly, onBack, 
     }
 
     if (dialog === "promo") {
-      if (!value("title") || !value("period") || !value("summary")) return setDialogError("Nama promo, periode, dan ringkasan wajib diisi.");
-      const promo: CampaignPromo = { id: globalThis.crypto.randomUUID(), title: value("title"), period: value("period"), summary: value("summary"), detail: value("detail") || "Syarat dan mekanisme belum dilengkapi.", status: value("status") || "Draf" };
+      const startDate = value("startDate");
+      const endDate = value("endDate");
+      if (!value("title") || !startDate || !endDate) return setDialogError("Nama promo, tanggal mulai, dan tanggal selesai wajib diisi.");
+      const periodError = validateCampaignPeriod(startDate, endDate);
+      if (periodError) return setDialogError(periodError);
+      const detail = value("detail");
+      const promo: CampaignPromo = { id: globalThis.crypto.randomUUID(), title: value("title"), period: formatCampaignPeriod(startDate, endDate), startDate, endDate, detail: detail || "Mekanisme dan syarat belum dilengkapi.", status: "Draf" };
       updatePresentation((current) => ({ ...current, promos: [...current.promos, promo] }));
       notify("Promo ditambahkan sebagai draf tampilan sementara.");
     }
@@ -233,10 +274,22 @@ function CampaignWorkspaceContent({ campaign, data, identity, readOnly, onBack, 
     if (dialog === "reference") {
       let url: URL;
       try { url = new URL(value("url")); } catch { return setDialogError("Masukkan URL referensi yang valid, termasuk https://."); }
-      if (!value("title") || !["http:", "https:"].includes(url.protocol)) return setDialogError("Judul dan URL HTTP/HTTPS yang valid wajib diisi.");
-      const reference: CreativeReference = { id: globalThis.crypto.randomUUID(), title: value("title"), url: url.toString(), kind: value("kind") || "Link" };
+      const startDate = value("startDate");
+      const endDate = value("endDate");
+      if (!value("title") || !["http:", "https:"].includes(url.protocol) || !startDate || !endDate) return setDialogError("Judul, URL, tanggal mulai, dan tanggal selesai wajib diisi.");
+      const periodError = validateCampaignPeriod(startDate, endDate);
+      if (periodError) return setDialogError(periodError);
+      const kind = value("kind") || "Link";
+      let reference: CreativeReference = { id: globalThis.crypto.randomUUID(), title: value("title"), url: url.toString(), kind, startDate, endDate, source: "presentation" };
+      const token = await getAccessToken?.();
+      if (token) {
+        const response = await fetch(`/api/campaigns/${campaign.id}/references`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ title: reference.title, url: reference.url, kind, startDate, endDate, mimeType: values.get("mimeType") || undefined }) });
+        const result = await response.json() as { reference?: { id: string; title: string; url: string; kind: string; start_date: string; end_date: string; mime_type?: string | null }; error?: string };
+        if (!response.ok || !result.reference) return setDialogError(result.error || "Referensi belum dapat disimpan.");
+        reference = { id: result.reference.id, title: result.reference.title, url: result.reference.url, kind: result.reference.kind, startDate: result.reference.start_date, endDate: result.reference.end_date, mimeType: result.reference.mime_type || undefined, source: "backend" };
+      }
       updatePresentation((current) => ({ ...current, references: [...current.references, reference] }));
-      notify("Referensi ditambahkan sebagai draf tampilan sementara.");
+      notify(token ? "Referensi berhasil disimpan." : "Referensi ditambahkan sebagai draf tampilan sementara.");
     }
 
     closeDialog();
@@ -271,7 +324,7 @@ function CampaignWorkspaceContent({ campaign, data, identity, readOnly, onBack, 
 
   const tabContent = {
     overview: <OverviewTab campaign={campaign} tasks={campaignTasks} completedTasks={completedTasks} taskProgress={taskProgress} budgetProgress={budgetProgress} presentation={presentation} teamNames={teamNames} linkedInfluencerCount={linkedInfluencers.length} canEdit={canEdit} onOpenTab={setActiveTab} onEditInfo={() => openDialog("info")} onEditBrief={() => openDialog("brief")} onAddKpi={() => openDialog("kpi")} onAddPromo={() => openDialog("promo")} onToggleTask={toggleTask} onAcknowledge={() => updatePresentation((current) => ({ ...current, acknowledged: !current.acknowledged }))} />,
-    brief: <BriefPromoTab campaign={campaign} presentation={presentation} canEdit={canEdit} onEditBrief={() => openDialog("brief")} onAddPromo={() => openDialog("promo")} onAddReference={() => openDialog("reference")} />,
+    brief: <BriefPromoTab campaign={campaign} presentation={presentation} canEdit={canEdit} referenceSync={referenceSync} onEditBrief={() => openDialog("brief")} onAddPromo={() => openDialog("promo")} onAddReference={() => openDialog("reference")} />,
     timeline: <TimelineTasksTab campaign={campaign} tasks={campaignTasks} presentation={presentation} selectedPhaseId={activePhaseId} taskView={taskView} canEdit={canEdit} onTaskView={setTaskView} onSelectPhase={setSelectedPhase} onAssignTaskPhase={assignTaskPhase} onTogglePhaseMode={() => { updatePresentation((current) => ({ ...current, phaseMode: !current.phaseMode })); if (canEdit) notify("Mode fase diubah untuk sesi tampilan ini."); }} onAddPhase={() => openDialog("phase")} onAddTask={() => openDialog("task")} onToggleTask={toggleTask} />,
     content: <ContentInfluencerTab linkedInfluencers={linkedInfluencers} brandContent={brandContentCandidates} filter={contentFilter} onFilter={setContentFilter} onNavigate={onNavigate} />,
     finance: <FinanceTab campaign={campaign} transactionCandidates={brandTransactionCandidates} onNavigate={onNavigate} />,
@@ -295,9 +348,9 @@ function CampaignWorkspaceContent({ campaign, data, identity, readOnly, onBack, 
     </nav>
 
     <div className="campaign-tab-panel" role="tabpanel" id="campaign-tab-panel" aria-labelledby={`campaign-tab-${activeTab}`}>{tabContent[activeTab]}</div>
-    <IntegrationNotice tone="amber"><strong>Mode review UI/UX.</strong> Brief, promo, KPI tambahan, fase, referensi, dan diskusi memakai state presentasi sementara. Tugas tetap tersimpan melalui sumber data To-Do yang sudah ada.</IntegrationNotice>
+    <IntegrationNotice tone="amber"><strong>Mode review UI/UX.</strong> Brief, promo, KPI tambahan, fase, dan diskusi masih memakai state presentasi sementara. Referensi tersimpan ke Supabase saat koneksi live aktif; tugas tetap menggunakan sumber data To-Do yang sudah ada.</IntegrationNotice>
 
-    {dialog && <CampaignDialog type={dialog} campaign={campaign} data={data} presentation={presentation} error={dialogError} onClose={closeDialog} onSubmit={submitDialog} />}
+    {dialog && <CampaignDialog type={dialog} campaign={campaign} data={data} presentation={presentation} error={dialogError} onClose={closeDialog} onSubmit={submitDialog} onUploadImage={dialog === "reference" ? uploadReferenceImage : undefined} />}
   </div>;
 }
 
@@ -340,7 +393,7 @@ function OverviewTab({ campaign, tasks, completedTasks, taskProgress, budgetProg
       <aside className="campaign-tab-stack">
         <section className="card">
           <CampaignSectionHeader icon="campaign" title="Promo utama" action={canEdit ? <button className="button button-soft button-sm" onClick={onAddPromo}><Icon name="plus" size={12} />Tambah</button> : undefined} />
-          {presentation.promos.length ? presentation.promos.slice(0, 2).map((promo) => <PromoCard key={promo.id} promo={promo} />) : <EmptyCampaignState icon="campaign" title="Promo belum disusun" description="Tambahkan periode, mekanisme, kuota, dan status persetujuan promo." />}
+          {presentation.promos.length ? presentation.promos.slice(0, 2).map((promo) => <PromoCard key={promo.id} promo={promo} />) : <EmptyCampaignState icon="campaign" title="Promo belum disusun" description="Tambahkan periode dan mekanisme promo." />}
         </section>
         <section className="card">
           <CampaignSectionHeader icon="users" title="Tim campaign" description={`${teamNames.length} orang terlibat sebagai PIC tugas.`} />
@@ -359,7 +412,7 @@ function OverviewTab({ campaign, tasks, completedTasks, taskProgress, budgetProg
   </div>;
 }
 
-function BriefPromoTab({ campaign, presentation, canEdit, onEditBrief, onAddPromo, onAddReference }: { campaign: Campaign; presentation: PresentationState; canEdit: boolean; onEditBrief: () => void; onAddPromo: () => void; onAddReference: () => void }) {
+function BriefPromoTab({ campaign, presentation, canEdit, referenceSync, onEditBrief, onAddPromo, onAddReference }: { campaign: Campaign; presentation: PresentationState; canEdit: boolean; referenceSync: "idle" | "loading" | "error"; onEditBrief: () => void; onAddPromo: () => void; onAddReference: () => void }) {
   const hasBrief = Boolean(presentation.bigMessage || presentation.intro || presentation.tagline);
   const hasStoredKpi = Boolean(campaign.kpi && campaign.kpi !== "Belum ditentukan");
   return <div className="campaign-tab-stack">
@@ -371,7 +424,9 @@ function BriefPromoTab({ campaign, presentation, canEdit, onEditBrief, onAddProm
           {hasBrief ? <div className="campaign-brief-content"><div className="campaign-subheading">TAGLINE</div><h3>{presentation.tagline || "Belum ditentukan"}</h3><div className="campaign-subheading">BIG MESSAGE</div><h4>{presentation.bigMessage}</h4><div className="campaign-subheading">INTRO / GAMBARAN UMUM</div><p>{presentation.intro || "Belum dilengkapi."}</p><div className="campaign-divider" /><div className="campaign-subheading">ALUR PENGERJAAN</div>{presentation.steps.length ? presentation.steps.map((step, index) => <div className="campaign-step" key={`${step}-${index}`}><span>{String(index + 1).padStart(2, "0")}</span><p>{step}</p></div>) : <p className="campaign-muted-copy">Langkah pengerjaan belum disusun.</p>}</div> : <EmptyCampaignState icon="book" title="Brief utama belum lengkap" description={hasStoredKpi ? `Target existing “${campaign.kpi}” tetap tersedia, tetapi belum ada tagline, big message, atau gambaran umum.` : "Belum ada tagline, big message, gambaran umum, maupun target KPI."} action={canEdit ? <button className="button button-primary button-sm" onClick={onEditBrief}><Icon name="plus" size={12} />Tulis brief</button> : undefined} />}
         </section>
         <section className="card">
-          <CampaignSectionHeader icon="image" title="Referensi kreatif" description="Link gambar, moodboard, atau dokumen acuan." action={canEdit ? <button className="button button-soft button-sm" onClick={onAddReference}><Icon name="plus" size={12} />Tambah referensi</button> : undefined} />
+        <CampaignSectionHeader icon="image" title="Referensi kreatif" description="Link gambar, moodboard, atau dokumen acuan." action={canEdit ? <button className="button button-soft button-sm" onClick={onAddReference}><Icon name="plus" size={12} />Tambah referensi</button> : undefined} />
+        {referenceSync === "loading" && <IntegrationNotice>Memuat referensi tersimpan…</IntegrationNotice>}
+        {referenceSync === "error" && <IntegrationNotice tone="amber">Referensi tersimpan belum dapat dimuat. Pastikan migration Campaign Reference sudah dijalankan.</IntegrationNotice>}
           {presentation.references.length ? <div className="campaign-reference-grid">{presentation.references.map((reference) => <CreativeReferenceCard key={reference.id} reference={reference} />)}</div> : <EmptyCampaignState icon="image" title="Belum ada referensi" description="Tambahkan tautan moodboard atau dokumen agar eksekusi kreatif lebih konsisten." />}
         </section>
         <section className="card">
@@ -382,7 +437,7 @@ function BriefPromoTab({ campaign, presentation, canEdit, onEditBrief, onAddProm
 
       <aside className="card campaign-promo-column">
         <CampaignSectionHeader icon="campaign" title="Promo & mekanisme" description="Periode, manfaat, kuota, syarat, dan status persetujuan." action={canEdit ? <button className="button button-primary button-sm" onClick={onAddPromo}><Icon name="plus" size={12} />Tambah promo</button> : undefined} />
-        {presentation.promos.length ? presentation.promos.map((promo) => <PromoCard key={promo.id} promo={promo} />) : <EmptyCampaignState icon="campaign" title="Belum ada promo terstruktur" description="Data promo tidak tersedia pada skema Campaign saat ini. Tambahkan draf untuk mereview pola tampilannya." />}
+        {presentation.promos.length ? presentation.promos.map((promo) => <PromoCard key={promo.id} promo={promo} />) : <EmptyCampaignState icon="campaign" title="Belum ada promo terstruktur" description="Tambahkan draf promo untuk mereview periode dan mekanismenya." />}
       </aside>
     </div>
   </div>;
@@ -494,8 +549,9 @@ function DiscussionTab({ identity, presentation, replyTo, canEdit, onReply, onUp
   </div>;
 }
 
-function CampaignDialog({ type, campaign, data, presentation, error, onClose, onSubmit }: { type: CampaignDialogType; campaign: Campaign; data: AppData; presentation: PresentationState; error: string; onClose: () => void; onSubmit: (event: FormEvent<HTMLFormElement>) => void }) {
+function CampaignDialog({ type, campaign, data, presentation, error, onClose, onSubmit, onUploadImage }: { type: CampaignDialogType; campaign: Campaign; data: AppData; presentation: PresentationState; error: string; onClose: () => void; onSubmit: (event: FormEvent<HTMLFormElement>) => void; onUploadImage?: (file: File) => Promise<string> }) {
   const dialogRef = useRef<HTMLElement>(null);
+  const [pasteStatus, setPasteStatus] = useState("");
   const info: Record<CampaignDialogType, { title: string; description: string }> = {
     info: { title: "Edit informasi Campaign", description: "Perbarui informasi dasar tanpa mengubah PIC tugas atau data operasional lain." },
     brief: { title: "Lengkapi brief campaign", description: "Draf ini hanya dipakai untuk review UI dan belum disimpan ke Supabase." },
@@ -536,17 +592,44 @@ function CampaignDialog({ type, campaign, data, presentation, error, onClose, on
     };
   }, [onClose]);
 
+  const handlePaste = async (event: ClipboardEvent<HTMLFormElement>) => {
+    if (type !== "reference") return;
+    const imageItem = Array.from(event.clipboardData.items).find((item) => item.type.startsWith("image/"));
+    if (!imageItem) return;
+    event.preventDefault();
+    const file = imageItem.getAsFile();
+    if (!file) return;
+    if (!onUploadImage) {
+      setPasteStatus("Hubungkan Supabase terlebih dahulu untuk mengunggah gambar dari clipboard.");
+      return;
+    }
+    setPasteStatus("Mengunggah gambar dari clipboard…");
+    try {
+      const url = await onUploadImage(file);
+      const form = event.currentTarget;
+      const urlInput = form.elements.namedItem("url") as HTMLInputElement | null;
+      const kindInput = form.elements.namedItem("kind") as HTMLSelectElement | null;
+      const mimeInput = form.elements.namedItem("mimeType") as HTMLInputElement | null;
+      if (urlInput) urlInput.value = url;
+      if (kindInput) kindInput.value = "Gambar";
+      if (mimeInput) mimeInput.value = file.type;
+      setPasteStatus("Gambar siap disimpan. Lengkapi judul dan periode, lalu simpan.");
+    } catch (uploadError) {
+      setPasteStatus(uploadError instanceof Error ? uploadError.message : "Upload gambar gagal.");
+    }
+  };
+
   return <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
     <section ref={dialogRef} className="modal campaign-detail-modal" role="dialog" aria-modal="true" aria-labelledby="campaign-dialog-title" aria-describedby="campaign-dialog-description">
       <div className="modal-head"><div><h2 id="campaign-dialog-title">{info[type].title}</h2><p id="campaign-dialog-description">{info[type].description}</p></div><button type="button" className="icon-button modal-close" onClick={onClose} aria-label="Tutup"><Icon name="close" /></button></div>
-      <form onSubmit={onSubmit} className="form-stack">
+      <form onSubmit={onSubmit} onPaste={handlePaste} className="form-stack">
         {type === "info" && <><Field label="Nama Campaign" name="name" required defaultValue={campaign.name} placeholder="Contoh: Grand Opening RUMA Purwokerto" /><Select label="Brand" name="brand" values={campaignBrands(data, campaign.brand)} defaultValue={campaign.brand} required /><div className="campaign-form-group"><div><strong>Periode Campaign</strong><span>Opsional, kosongkan bila belum ditentukan.</span></div><div className="two-fields"><Field label="Tanggal mulai" name="startDate" type="date" defaultValue={campaign.startDate || ""} /><Field label="Tanggal selesai" name="endDate" type="date" defaultValue={campaign.endDate || ""} min={campaign.startDate || undefined} /></div></div><TextArea label="Tujuan Singkat" name="objective" defaultValue={campaign.objective} placeholder="Apa tujuan utama campaign ini?" /></>}
         {type === "brief" && <><Field label="Tagline" name="tagline" defaultValue={presentation.tagline} placeholder="Contoh: Make it Machiro" /><TextArea label="Big message" name="bigMessage" required defaultValue={presentation.bigMessage} placeholder="Pesan utama yang harus dipahami audiens" /><TextArea label="Gambaran umum" name="intro" defaultValue={presentation.intro} placeholder="Latar belakang, tujuan, dan fokus komunikasi" /><TextArea label="Alur pengerjaan" name="steps" defaultValue={presentation.steps.join("\n")} placeholder="Satu langkah per baris" /><TextArea label="Instruksi penting" name="instructions" defaultValue={presentation.instructions} placeholder="Syarat promo atau hal yang wajib dikonfirmasi" /></>}
         {type === "kpi" && <><Field label="Nama KPI" name="name" required placeholder="Contoh: Voucher redeem" /><div className="two-fields"><Field label="Realisasi" name="current" required type="number" min="0" /><Field label="Target" name="target" required type="number" min="0.01" step="any" /></div><Select label="Unit" name="unit" values={["Angka", "Persen", "Rupiah"]} /></>}
-        {type === "promo" && <><Field label="Nama promo" name="title" required placeholder="Contoh: Diskon 30%" /><Field label="Periode" name="period" required placeholder="Contoh: 19–20 September" /><TextArea label="Ringkasan" name="summary" required placeholder="Manfaat utama dan sasaran promo" /><TextArea label="Mekanisme & syarat" name="detail" placeholder="Kuota, eligibility, cara klaim, dan batasan" /><Select label="Status" name="status" values={["Draf", "Review", "Disetujui", "Aktif"]} /></>}
+        {type === "promo" && <><Field label="Nama promo" name="title" required placeholder="Contoh: Diskon 30%" /><div className="campaign-form-group"><div><strong>Periode promo</strong><span>Pilih tanggal mulai dan selesai.</span></div><div className="two-fields"><Field label="Tanggal mulai" name="startDate" type="date" required /><Field label="Tanggal selesai" name="endDate" type="date" required /></div></div><TextArea label="Mekanisme & syarat" name="detail" placeholder="Kuota, eligibility, cara klaim, dan batasan (opsional)" /><div className="campaign-form-hint">Promo baru akan dibuat sebagai <strong>Draft</strong>. Status dapat diatur melalui aksi promo setelah workflow backend tersedia.</div></>}
         {type === "phase" && <><Field label="Nama fase" name="name" required placeholder="Contoh: Teaser" /><Field label="Periode" name="period" required placeholder="Contoh: 1–11 September" /><TextArea label="Tujuan fase" name="purpose" placeholder="Apa yang harus dicapai pada fase ini?" /><Select label="Status" name="status" values={["Rencana", "Berjalan", "Selesai"]} /></>}
         {type === "task" && <><Field label="Judul tugas" name="title" required placeholder="Contoh: Finalisasi key visual" /><div className="two-fields"><Select label="PIC" name="pic" values={data.users.length ? data.users.map((user) => user.name) : ["Belum ditentukan"]} /><Field label="Tenggat" name="due" type="date" required /></div><div className="two-fields"><Select label="Prioritas" name="priority" values={["Sedang", "Tinggi", "Rendah"]} />{presentation.phaseMode && presentation.phases.length > 0 && <Select label="Fase" name="phaseId" values={presentation.phases.map((phase) => phase.id)} labels={presentation.phases.map((phase) => phase.name)} />}</div></>}
-        {type === "reference" && <><Field label="Judul referensi" name="title" required placeholder="Contoh: Moodboard visual" /><Field label="URL" name="url" required type="url" placeholder="https://..." /><Select label="Jenis" name="kind" values={["Link", "Gambar", "Dokumen"]} /></>}
+        {type === "reference" && <><Field label="Judul referensi" name="title" required placeholder="Contoh: Moodboard visual" /><div className="campaign-form-group"><div><strong>Periode referensi</strong><span>Gunakan periode saat referensi dipakai dalam campaign.</span></div><div className="two-fields"><Field label="Tanggal mulai" name="startDate" type="date" required /><Field label="Tanggal selesai" name="endDate" type="date" required /></div></div><Field label="URL" name="url" required type="url" placeholder="https://..." /><Select label="Jenis" name="kind" values={["Link", "Gambar", "Dokumen"]} /><input type="hidden" name="mimeType" /><div className="campaign-reference-paste-note"><Icon name="image" size={16} /><span><strong>Tempel gambar langsung</strong><br />Salin gambar, lalu tekan Ctrl + V di form ini. {pasteStatus && <em>{pasteStatus}</em>}</span></div></>}
         {error && <div className="campaign-form-error" role="alert"><Icon name="alert" size={14} />{error}</div>}
         <div className="modal-actions"><button type="button" className="button button-ghost" onClick={onClose}>Batal</button><button type="submit" className="button button-primary">Simpan perubahan</button></div>
       </form>

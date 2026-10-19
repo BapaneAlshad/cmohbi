@@ -34,6 +34,11 @@ function isMissingOperationalTable(error: { code?: string; message?: string } | 
   return error?.code === "42P01" || ["marketing_requests", "marketing_influencers", "marketing_transactions"].some((table) => message.includes(table));
 }
 
+function isMissingBrandTable(error: { code?: string; message?: string } | null) {
+  const message = error?.message?.toLowerCase() ?? "";
+  return error?.code === "42P01" || ["relation \"brands\"", "relation \"brand_menus\"", "brands", "brand_menus"].some((table) => message.includes(table));
+}
+
 function isMissingCampaignAuditColumn(error: { code?: string; message?: string } | null) {
   const message = error?.message?.toLowerCase() ?? "";
   return error?.code === "42703"
@@ -57,7 +62,7 @@ export async function loadWorkspaceData(
   fallback: AppData,
   currentUserEmail: string,
 ): Promise<AppData> {
-  const [campaignResult, taskResult, memberResult, bookingResult, accountResult, metricResult, postResult, inboxResult, requestResult, influencerResult, transactionResult] = await Promise.all([
+  const [campaignResult, taskResult, memberResult, bookingResult, accountResult, metricResult, postResult, inboxResult, requestResult, influencerResult, transactionResult, brandResult, brandMenuResult] = await Promise.all([
     client.from("campaigns").select("*").eq("workspace_id", workspaceId).order("created_at", { ascending: false }),
     client.from("tasks").select("*").eq("workspace_id", workspaceId).order("created_at", { ascending: true }),
     client.from("workspace_members").select("user_id, role").eq("workspace_id", workspaceId),
@@ -69,6 +74,8 @@ export async function loadWorkspaceData(
     client.from("marketing_requests").select("*").eq("workspace_id", workspaceId).order("request_date", { ascending: false }),
     client.from("marketing_influencers").select("*").eq("workspace_id", workspaceId).order("created_at", { ascending: false }),
     client.from("marketing_transactions").select("*").eq("workspace_id", workspaceId).order("transaction_date", { ascending: false }),
+    client.from("brands").select("*").eq("workspace_id", workspaceId).order("name", { ascending: true }),
+    client.from("brand_menus").select("*").eq("workspace_id", workspaceId).order("name", { ascending: true }),
   ]);
 
   const firstError = campaignResult.error || taskResult.error || memberResult.error;
@@ -85,6 +92,8 @@ export async function loadWorkspaceData(
   const campaignRows = campaignResult.data ?? [];
   const taskRows = taskResult.data ?? [];
   const campaignById = new Map(campaignRows.map((campaign) => [campaign.id, campaign]));
+  const brandRows = brandResult.error || brandMenuResult.error ? [] : (brandResult.data ?? []);
+  const brandNameById = new Map(brandRows.map((brand) => [brand.id, brand.name]));
   const fallbackAccounts = fallback.socialAccounts;
   const socialHubTablesMissing = Boolean(accountResult.error && isMissingSocialHubTable(accountResult.error));
   const connectionRows = accountResult.error ? [] : (accountResult.data ?? []);
@@ -181,11 +190,30 @@ export async function loadWorkspaceData(
     amount: Number(transaction.amount),
     type: transaction.transaction_type,
     status: transaction.status,
-    brand: transaction.brand,
+    brand: brandNameById.get(transaction.brand_id) ?? transaction.brand,
+    brandId: transaction.brand_id || null,
   }));
+  const brands = brandResult.error || brandMenuResult.error
+    ? fallback.brands
+    : (brandResult.data ?? []).map((brand) => ({
+      id: brand.id,
+      name: brand.name,
+      openingDate: brand.opening_date,
+      description: brand.description || "",
+      targetCustomer: brand.target_customer || "",
+      vision: brand.vision || "",
+      mission: brand.mission || "",
+      logoUrl: brand.logo_url || null,
+      outletImageUrl: brand.outlet_image_url || null,
+      websiteUrl: brand.website_url || null,
+      proposalUrl: brand.proposal_url || null,
+      importantDataUrl: brand.important_data_url || null,
+      menus: (brandMenuResult.data ?? []).filter((menu) => menu.brand_id === brand.id).map((menu) => ({ id: menu.id, name: menu.name, hpp: Number(menu.hpp), sellingPrice: Number(menu.selling_price) })),
+    }));
 
   return {
     ...fallback,
+    brands,
     content,
     socialAccounts: accountRows,
     socialSnapshots: metrics,
@@ -197,7 +225,8 @@ export async function loadWorkspaceData(
     campaigns: campaignRows.map((campaign) => ({
       id: campaign.id,
       name: campaign.name,
-      brand: campaign.brand,
+      brand: brandNameById.get(campaign.brand_id) ?? campaign.brand,
+      brandId: campaign.brand_id || null,
       objective: campaign.objective || "",
       startDate: campaign.start_date,
       endDate: campaign.end_date,
@@ -219,7 +248,8 @@ export async function loadWorkspaceData(
     tasks: taskRows.map((task) => ({
       id: task.id,
       title: task.title,
-      brand: campaignById.get(task.campaign_id)?.brand ?? "HBI",
+      brand: brandNameById.get(task.brand_id) ?? campaignById.get(task.campaign_id)?.brand ?? "HBI",
+      brandId: task.brand_id || null,
       pic: profileById.get(task.assignee_id)?.full_name ?? "Belum ditentukan",
       due: formatDate(task.due_date),
       dueDate: task.due_date || undefined,
@@ -264,10 +294,12 @@ export async function saveWorkspaceData(
   userId: string,
   data: AppData,
 ) {
-  const [existingCampaignAuditResult, existingTaskResult, existingRequestResult] = await Promise.all([
+  const [existingCampaignAuditResult, existingTaskResult, existingRequestResult, existingBrandResult, existingBrandMenuResult] = await Promise.all([
     client.from("campaigns").select("id, owner_id, created_by").eq("workspace_id", workspaceId),
     client.from("tasks").select("id, assignee_id, created_by").eq("workspace_id", workspaceId),
     client.from("marketing_requests").select("id, pic_id").eq("workspace_id", workspaceId),
+    client.from("brands").select("id").eq("workspace_id", workspaceId),
+    client.from("brand_menus").select("id").eq("workspace_id", workspaceId),
   ]);
   let campaignAuditColumnsAvailable = true;
   let existingCampaignRows: Array<{ id: string; owner_id: string | null; created_by?: string | null }>;
@@ -282,10 +314,14 @@ export async function saveWorkspaceData(
   }
   if (existingTaskResult.error) throw existingTaskResult.error;
   if (existingRequestResult.error && !isMissingOperationalTable(existingRequestResult.error)) throw existingRequestResult.error;
+  if (existingBrandResult.error && !isMissingBrandTable(existingBrandResult.error)) throw existingBrandResult.error;
+  if (existingBrandMenuResult.error && !isMissingBrandTable(existingBrandMenuResult.error)) throw existingBrandMenuResult.error;
 
   const existingCampaignById = new Map(existingCampaignRows.map((campaign) => [campaign.id, campaign]));
   const existingTaskById = new Map((existingTaskResult.data ?? []).map((task) => [task.id, task]));
   const existingRequestById = new Map((existingRequestResult.data ?? []).map((request) => [request.id, request]));
+  const brandIdByName = new Map((data.brands || []).map((brand) => [brand.name, brand.id]));
+  const brandPersistenceAvailable = !existingBrandResult.error && !existingBrandMenuResult.error;
   const campaigns = data.campaigns
     .filter((campaign) => typeof campaign.id === "string")
     .map((campaign) => {
@@ -295,6 +331,7 @@ export async function saveWorkspaceData(
         workspace_id: workspaceId,
         name: campaign.name,
         brand: campaign.brand,
+        ...(brandPersistenceAvailable ? { brand_id: brandIdByName.get(campaign.brand) || campaign.brandId || null } : {}),
         objective: campaign.objective || null,
         kpi: campaign.kpi,
         budget: campaign.budget,
@@ -325,6 +362,7 @@ export async function saveWorkspaceData(
       workspace_id: workspaceId,
       campaign_id: typeof task.campaign === "string" ? task.campaign : null,
       title: task.title,
+      ...(brandPersistenceAvailable ? { brand_id: brandIdByName.get(task.brand) || task.brandId || null } : {}),
       status: taskStatusToDatabase[task.status],
       priority: task.priority,
       due_date: task.dueDate || (/^\d{4}-\d{2}-\d{2}$/.test(task.due) ? task.due : null),
@@ -420,8 +458,40 @@ export async function saveWorkspaceData(
       transaction_type: transaction.type,
       status: transaction.status,
       brand: transaction.brand,
+      ...(brandPersistenceAvailable ? { brand_id: brandIdByName.get(transaction.brand) || transaction.brandId || null } : {}),
       updated_at: new Date().toISOString(),
     }));
+  const brands = (data.brands || []).filter((brand) => isUuid(brand.id)).map((brand) => ({
+    id: brand.id,
+    workspace_id: workspaceId,
+    name: brand.name,
+    opening_date: brand.openingDate || null,
+    description: brand.description || "",
+    target_customer: brand.targetCustomer || "",
+    vision: brand.vision || "",
+    mission: brand.mission || "",
+    logo_url: brand.logoUrl || null,
+    outlet_image_url: brand.outletImageUrl || null,
+    website_url: brand.websiteUrl || null,
+    proposal_url: brand.proposalUrl || null,
+    important_data_url: brand.importantDataUrl || null,
+    created_by: userId,
+    updated_by: userId,
+    updated_at: new Date().toISOString(),
+  }));
+  const brandMenus = brandPersistenceAvailable ? (data.brands || []).filter((brand) => isUuid(brand.id)).flatMap((brand) => brand.menus.filter((menu) => isUuid(menu.id)).map((menu) => ({
+    id: menu.id,
+    workspace_id: workspaceId,
+    brand_id: brand.id,
+    name: menu.name,
+    hpp: menu.hpp,
+    selling_price: menu.sellingPrice,
+    updated_at: new Date().toISOString(),
+  }))) : [];
+  const savedBrandMenuIds = new Set(brandMenus.map((menu) => menu.id));
+  const brandMenuDeletes = !brandPersistenceAvailable
+    ? []
+    : (existingBrandMenuResult.data ?? []).filter((menu) => !savedBrandMenuIds.has(menu.id)).map((menu) => client.from("brand_menus").delete().eq("id", menu.id).eq("workspace_id", workspaceId));
   const socialInboxUpdates = data.socialInbox
     .filter((item) => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(item.id))
     .map((item) => client.from("social_inbox").update({ status: item.status, updated_at: new Date().toISOString() }).eq("id", item.id));
@@ -434,11 +504,16 @@ export async function saveWorkspaceData(
     requests.length ? client.from("marketing_requests").upsert(requests, { onConflict: "id" }) : Promise.resolve({ error: null }),
     influencers.length ? client.from("marketing_influencers").upsert(influencers, { onConflict: "id" }) : Promise.resolve({ error: null }),
     transactions.length ? client.from("marketing_transactions").upsert(transactions, { onConflict: "id" }) : Promise.resolve({ error: null }),
+    brandPersistenceAvailable && brands.length ? client.from("brands").upsert(brands, { onConflict: "id" }) : Promise.resolve({ error: null }),
+    brandPersistenceAvailable && brandMenus.length ? client.from("brand_menus").upsert(brandMenus, { onConflict: "id" }) : Promise.resolve({ error: null }),
   ]);
 
-  const error = results.map((result) => result.error).find((result) => result && !isMissingBookingsTable(result) && !isMissingOperationalTable(result)) ?? null;
+  const error = results.map((result) => result.error).find((result) => result && !isMissingBookingsTable(result) && !isMissingOperationalTable(result) && !isMissingBrandTable(result)) ?? null;
   if (error) throw error;
   const inboxResults = await Promise.all(socialInboxUpdates);
   const inboxError = inboxResults.map((result) => result.error).find((result) => result && !isMissingSocialHubTable(result)) ?? null;
   if (inboxError) throw inboxError;
+  const brandMenuDeleteResults = await Promise.all(brandMenuDeletes);
+  const brandMenuDeleteError = brandMenuDeleteResults.map((result) => result.error).find((result) => result && !isMissingBrandTable(result)) ?? null;
+  if (brandMenuDeleteError) throw brandMenuDeleteError;
 }

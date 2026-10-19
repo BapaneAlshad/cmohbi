@@ -1,6 +1,7 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import type { AppData, Task } from "@/lib/types";
 import { Avatar, Icon, PriorityPill, rupiah, StatusPill } from "@/components/ui";
+import { formatCampaignPeriod } from "@/lib/campaign-form";
 
 export function PresentationBadge({ children = "Draf tampilan" }: { children?: ReactNode }) {
   return <span className="campaign-source-badge"><Icon name="info" size={12} />{children}</span>;
@@ -34,10 +35,10 @@ export function BudgetProgress({ budget, spent, compact = false }: { budget: num
   return <div className={`campaign-budget-progress ${compact ? "compact" : ""}`}><div className="campaign-budget-top"><div><span>Realisasi tersimpan</span><strong>{rupiah(safeSpent)}</strong></div><div className="campaign-budget-right"><span>Dari anggaran</span><strong>{rupiah(safeBudget)}</strong></div></div><div className="campaign-progress amber"><span style={{ width: `${percentage}%` }} /></div><div className="campaign-budget-bottom"><span>{Math.round(percentage)}% terpakai</span><span>Sisa {rupiah(Math.max(safeBudget - safeSpent, 0))}</span></div></div>;
 }
 
-export type CampaignPromo = { id: string; title: string; period: string; summary: string; detail: string; status: string };
+export type CampaignPromo = { id: string; title: string; period: string; startDate?: string; endDate?: string; summary?: string; detail: string; status: string };
 
 export function PromoCard({ promo }: { promo: CampaignPromo }) {
-  return <article className="campaign-promo-card"><div className="campaign-card-row"><StatusPill status={promo.status} /><span>{promo.period}</span></div><h3>{promo.title}</h3><p>{promo.summary}</p><div className="campaign-promo-detail">{promo.detail}</div><PresentationBadge /></article>;
+  return <article className="campaign-promo-card"><div className="campaign-card-row"><StatusPill status={promo.status} /><span>{promo.period}</span></div><h3>{promo.title}</h3>{promo.summary && <p>{promo.summary}</p>}<div className="campaign-promo-detail">{promo.detail}</div><PresentationBadge /></article>;
 }
 
 export type CampaignPhase = { id: string; name: string; period: string; purpose: string; status: string };
@@ -51,10 +52,12 @@ export function CampaignTaskRow({ task, onToggle, phaseName, phaseOptions = [], 
   return <div className={`campaign-task-row ${done ? "done" : ""}`}><button type="button" className="campaign-task-check" onClick={onToggle} disabled={readOnly} title={readOnly ? "Akses baca saja" : undefined} aria-label={done ? `Buka kembali ${task.title}` : `Tandai ${task.title} selesai`}><Icon name={done ? "check" : "circle"} size={13} /></button><div className="campaign-task-copy"><strong>{task.title}</strong><p>{phaseName ? `${phaseName} · ` : ""}{task.pic} · Tenggat {task.due}</p></div>{onPhaseChange && phaseOptions.length > 0 && <label className="campaign-task-phase"><span>Fase</span><select value={phaseId} onChange={(event) => onPhaseChange(event.target.value)} disabled={readOnly} aria-label={`Fase untuk ${task.title}`}><option value="">Tanpa fase</option>{phaseOptions.map((phase) => <option value={phase.id} key={phase.id}>{phase.name}</option>)}</select></label>}<PriorityPill priority={task.priority} /><StatusPill status={task.status} /></div>;
 }
 
-export type CreativeReference = { id: string; title: string; url: string; kind: string };
+export type CreativeReference = { id: string; title: string; url: string; kind: string; startDate?: string; endDate?: string; mimeType?: string; source?: "backend" | "presentation" };
 
 export function CreativeReferenceCard({ reference }: { reference: CreativeReference }) {
-  return <a className="campaign-reference-card" href={reference.url} target="_blank" rel="noreferrer"><span className="campaign-reference-preview"><Icon name={reference.kind === "Gambar" ? "image" : "link"} size={24} /></span><strong>{reference.title}</strong><small>{reference.kind} · Buka referensi <Icon name="external" size={10} /></small></a>;
+  const [imageFailed, setImageFailed] = useState(false);
+  const isImage = reference.kind === "Gambar" || reference.mimeType?.startsWith("image/");
+  return <a className="campaign-reference-card" href={reference.url} target="_blank" rel="noreferrer"><span className="campaign-reference-preview">{isImage && !imageFailed ? <img src={reference.url} alt={reference.title} loading="lazy" onError={() => setImageFailed(true)} /> : <Icon name={isImage ? "image" : "link"} size={24} />}</span><strong>{reference.title}</strong><small>{reference.kind} · {reference.startDate && reference.endDate ? `${formatCampaignPeriod(reference.startDate, reference.endDate)} · ` : ""}Buka referensi <Icon name="external" size={10} /></small>{reference.source !== "backend" && <PresentationBadge />}</a>;
 }
 
 export function InfluencerBriefCard({ item }: { item: AppData["influencerSchedules"][number] }) {

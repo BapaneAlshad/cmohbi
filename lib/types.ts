@@ -1,17 +1,19 @@
-export type ViewName = "dashboard" | "campaigns" | "todo" | "calendar" | "requests" | "partners" | "influencer-schedule" | "analytics" | "social-hub" | "account";
+export type ViewName = "dashboard" | "campaigns" | "brands" | "todo" | "calendar" | "requests" | "partners" | "influencer-schedule" | "analytics" | "social-hub" | "account";
 export type SocialPlatform = "instagram" | "facebook" | "threads" | "tiktok";
 export type SocialInboxKind = "comment" | "message";
 export type TaskStatus = "Backlog" | "To Do" | "In Progress" | "Review" | "Revisi" | "Done";
 export type EntityId = number | string;
 export type CampaignLifecycle = "active" | "archived" | "trashed";
 
-export interface Campaign { id: EntityId; name: string; brand: string; objective: string; startDate?: string | null; endDate?: string | null; period: string; status: string; progress: number; budget: number; spent: number; kpi: string; tasks: number; content: number; lifecycleStatus: CampaignLifecycle; archivedAt?: string | null; archivedBy?: string | null; deletedAt?: string | null; deletedBy?: string | null; previousLifecycleStatus?: Exclude<CampaignLifecycle, "trashed"> | null }
-export interface Task { id: EntityId; title: string; brand: string; pic: string; due: string; dueDate?: string; priority: string; status: TaskStatus; campaign: EntityId | null }
+export interface Campaign { id: EntityId; name: string; brand: string; brandId?: EntityId | null; objective: string; startDate?: string | null; endDate?: string | null; period: string; status: string; progress: number; budget: number; spent: number; kpi: string; tasks: number; content: number; lifecycleStatus: CampaignLifecycle; archivedAt?: string | null; archivedBy?: string | null; deletedAt?: string | null; deletedBy?: string | null; previousLifecycleStatus?: Exclude<CampaignLifecycle, "trashed"> | null }
+export interface Task { id: EntityId; title: string; brand: string; brandId?: EntityId | null; pic: string; due: string; dueDate?: string; priority: string; status: TaskStatus; campaign: EntityId | null }
 export interface ContentItem { id: number | string; title: string; date: number; status: string; brand: string; platform: "Instagram" | "Facebook" | "Threads" | "TikTok"; caption?: string; mediaUrl?: string; mediaType?: "feed" | "reel" | "video"; scheduledAt?: string }
 export interface RequestItem { id: EntityId; title: string; sender: string; date: string; brand: string; priority: string; status: string; pic?: string; icon: string }
 export interface Influencer { id?: EntityId; name: string; platform: "Instagram" | "Facebook" | "TikTok"; niche: string; rate: number; followers: string; engagement: string; status: string }
 export interface InfluencerSchedule { id: EntityId; influencer: string; platform: "Instagram" | "Facebook" | "TikTok"; campaign: string; campaignId?: EntityId | null; content: string; date: string; time: string; status: string; rate: number; spent: number; paymentStatus: string; notes?: string }
-export interface Transaction { id?: EntityId; category: string; vendor: string; date: string; amount: number; type: string; status: string; brand: string }
+export interface Transaction { id?: EntityId; category: string; vendor: string; date: string; amount: number; type: string; status: string; brand: string; brandId?: EntityId | null }
+export interface BrandMenu { id: EntityId; name: string; hpp: number; sellingPrice: number }
+export interface Brand { id: EntityId; name: string; openingDate?: string | null; description: string; targetCustomer: string; vision: string; mission: string; logoUrl?: string | null; outletImageUrl?: string | null; websiteUrl?: string | null; proposalUrl?: string | null; importantDataUrl?: string | null; menus: BrandMenu[] }
 export interface User { name: string; username: string; email: string; whatsapp: string; role: string; status: string }
 export interface UserIdentity { name: string; username: string; email: string; whatsapp: string; role: string; accessRole?: "owner" | "admin" | "member" | "viewer" }
 export interface Metric { current: number; previous: number; target: number; unit: "number" | "percent"; }
@@ -22,6 +24,7 @@ export interface SocialInboxItem { id: string; platform: SocialPlatform; kind: S
 
 export interface AppData {
   campaigns: Campaign[];
+  brands: Brand[];
   tasks: Task[];
   content: ContentItem[];
   requests: RequestItem[];
