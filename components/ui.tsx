@@ -1,4 +1,5 @@
 "use client";
+import { useState } from "react";
 
 import {
   AlertTriangle, ArrowLeft, ArrowRight, BarChart3, Bell, BookOpen, CalendarDays,
@@ -6,7 +7,7 @@ import {
   Download, Edit3, ExternalLink, Eye, Film, Filter, Handshake, Home, Image as ImageIcon,
   Archive, Info, Instagram, Layers3, LayoutPanelLeft, Link2, LogOut, Menu, MessageSquare,
   Megaphone, Moon, MoreHorizontal, Paperclip, Pin, Plus, Reply, Search, Send, Share2,
-  RotateCcw, Sparkles, Sun, Target, Trash2, Users, X, type LucideIcon,
+  RotateCcw, Sparkles, Star, Sun, Target, Trash2, Users, X, type LucideIcon,
 } from "lucide-react";
 
 const icons: Record<string, LucideIcon> = {
@@ -23,14 +24,19 @@ const icons: Record<string, LucideIcon> = {
   restore: RotateCcw, target: Target, trash: Trash2, users: Users, wallet: CircleDollarSign, clock: Clock3,
 };
 
+export function TaskPriorityStar({ active }: { active: boolean }) {
+  return active ? <span className="task-priority-star" role="img" aria-label="Prioritas" title="Prioritas"><Star size={14} fill="currentColor" strokeWidth={1.6} /></span> : null;
+}
+
 export function Icon({ name, size = 16, className }: { name: string; size?: number; className?: string }) {
   const Glyph = icons[name] ?? Sparkles;
   return <Glyph aria-hidden="true" className={className} size={size} strokeWidth={1.8} />;
 }
 
-export function Avatar({ name, tone = "purple" }: { name: string; tone?: string }) {
+export function Avatar({ name, tone = "purple", src }: { name: string; tone?: string; src?: string | null }) {
+  const [failedSrc, setFailedSrc] = useState<string | null>(null);
   const initials = name.split(" ").map((word) => word[0]).slice(0, 2).join("").toUpperCase();
-  return <span className={`avatar avatar-${tone}`}>{initials}</span>;
+  return <span className={`avatar avatar-${tone}`} aria-label={name}>{src && failedSrc !== src ? <img src={src} alt="" onError={() => setFailedSrc(src)} /> : initials}</span>;
 }
 
 export function StatusPill({ status, className = "" }: { status: string; className?: string }) {
@@ -40,18 +46,25 @@ export function StatusPill({ status, className = "" }: { status: string; classNa
     Revisi: "status-revise", Done: "status-done", "To Do": "status-plan", Backlog: "status-review",
     Baru: "status-review", Diproses: "status-progress", Disetujui: "status-done", Draf: "status-review",
     Tayang: "status-active", Aktif: "status-active", "Belum Dibayar": "status-revise",
-    "Sudah Dibayar": "status-done", Terhubung: "status-done", "Perlu perhatian": "status-revise", "Butuh perhatian": "status-revise",
+    "Menunggu konfirmasi": "status-review", Terjadwal: "status-plan", "Sudah visit": "status-progress", Dibatalkan: "status-trashed",
+    "Belum dibayar": "status-revise", "DP dibayar": "status-progress", Lunas: "status-done", "Sudah Dibayar": "status-done", Terhubung: "status-done", "Perlu perhatian": "status-revise", "Butuh perhatian": "status-revise",
     Diarsipkan: "status-archived", Dihapus: "status-trashed",
   };
   return <span className={`status-pill ${statusClass[status] ?? "status-review"} ${className}`.trim()}>{status}</span>;
 }
 
 export function PriorityPill({ priority }: { priority: string }) {
-  return <span className={`priority-pill priority-${priority.toLowerCase()}`}>{priority}</span>;
+  const priorityClass: Record<string, string> = {
+    tinggi: "priority-high", high: "priority-high",
+    sedang: "priority-medium", medium: "priority-medium",
+    rendah: "priority-low", low: "priority-low",
+  };
+  const normalized = priority.trim().toLowerCase();
+  return <span className={`priority-pill ${priorityClass[normalized] ?? "priority-medium"}`}>{priority}</span>;
 }
 
 export function PageHeading({ kicker, title, description, action }: { kicker: string; title: string; description: string; action?: React.ReactNode }) {
-  return <div className="page-heading"><div><div className="eyebrow">{kicker}</div><h1>{title}</h1><p>{description}</p></div>{action && <div className="heading-actions">{action}</div>}</div>;
+  return <div className="page-heading"><div><div className="eyebrow">{kicker}</div><h1>{title}</h1>{description && <p>{description}</p>}</div>{action && <div className="heading-actions">{action}</div>}</div>;
 }
 
 export const rupiah = (value: number) => new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(value).replace("IDR", "Rp");

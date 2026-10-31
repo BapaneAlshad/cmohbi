@@ -2,8 +2,9 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Ngapaya — Marketing OS",
+  title: "Ngapaya — Marketing HBI",
   description: "Workspace manajemen tim dan analitik sosial media HBI",
+  icons: { icon: "/brand/ngapaya-logo.png", apple: "/brand/ngapaya-logo.png" },
 };
 
 export const viewport: Viewport = {

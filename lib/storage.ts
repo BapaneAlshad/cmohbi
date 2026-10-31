@@ -1,5 +1,6 @@
 import { demoData } from "./demo-data";
 import type { AppData } from "./types";
+import { cleanLocalUsers } from "./user-management";
 
 const STORAGE_KEY = "ngapaya-data-v2";
 
@@ -10,6 +11,7 @@ export function loadLocalData(): AppData {
     if (!saved) return structuredClone(demoData);
     const parsed = JSON.parse(saved) as Partial<AppData>;
     const merged = { ...structuredClone(demoData), ...parsed } as AppData;
+    merged.users = cleanLocalUsers(merged.users || [], demoData.users[0]);
     return { ...merged, brands: (merged.brands || demoData.brands).map((brand) => ({ ...brand, menus: brand.menus || [] })), campaigns: merged.campaigns.map((campaign) => {
       const fallbackCampaign = demoData.campaigns.find((item) => String(item.id) === String(campaign.id));
       return {

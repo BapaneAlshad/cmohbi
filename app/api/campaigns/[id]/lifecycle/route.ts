@@ -95,9 +95,8 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
 
   const profile = await context.admin.from("profiles").select("username, job_title").eq("id", context.user.id).maybeSingle();
   if (profile.error) return NextResponse.json({ error: profile.error.message }, { status: 500 });
-  const title = String(profile.data?.job_title || "").trim().toLowerCase();
-  if (!profile.data?.username || (!['cmo', 'super admin'].includes(title) && context.membership.role !== "owner")) {
-    return NextResponse.json({ error: "Hapus permanen hanya dapat dilakukan oleh CMO atau Super Admin." }, { status: 403 });
+  if (!profile.data?.username || !["owner", "admin"].includes(context.membership.role)) {
+    return NextResponse.json({ error: "Hapus permanen hanya dapat dilakukan oleh Super Admin." }, { status: 403 });
   }
 
   const attempts = await context.admin.from("campaign_delete_pin_attempts").select("failed_attempts, locked_until").eq("user_id", context.user.id).maybeSingle();

@@ -1,7 +1,10 @@
 import type { AppData } from "./types";
-import { demoAccount } from "./demo-account";
+import { demoAccounts } from "./demo-account.ts";
 
 export const demoData: AppData = {
+  campaignMembers: [],
+  campaignNotes: [],
+  adminDashboardNotes: [],
   brands: [
     { id: "brand-hbi", name: "HBI", openingDate: "1990-04-15", description: "Brand utama dengan fokus pada pengalaman makan yang hangat, praktis, dan relevan untuk keluarga Indonesia.", targetCustomer: "Keluarga muda, pekerja urban, dan pelanggan yang mencari pilihan makan praktis.", vision: "Menjadi pilihan pertama keluarga Indonesia untuk momen makan bersama.", mission: "Menghadirkan produk yang konsisten, layanan yang ramah, dan komunikasi yang dekat dengan pelanggan.", logoUrl: null, outletImageUrl: null, websiteUrl: "https://www.hokben.co.id/", proposalUrl: null, importantDataUrl: null, menus: [{ id: "menu-hbi-1", name: "Paket Special", hpp: 18000, sellingPrice: 32000 }, { id: "menu-hbi-2", name: "Paket Bento", hpp: 22000, sellingPrice: 39000 }] },
     { id: "brand-hokben", name: "HokBen", openingDate: "1985-04-18", description: "Brand restoran Jepang bergaya keluarga yang mengutamakan kualitas menu dan pengalaman pelanggan.", targetCustomer: "Keluarga, mahasiswa, dan profesional muda di area perkotaan.", vision: "Menjadi restoran keluarga Jepang pilihan Indonesia.", mission: "Menyajikan makanan berkualitas dengan layanan yang konsisten dan mudah dijangkau.", logoUrl: null, outletImageUrl: null, websiteUrl: "https://www.hokben.co.id/", proposalUrl: null, importantDataUrl: null, menus: [{ id: "menu-hokben-1", name: "Hoka Hemat", hpp: 21000, sellingPrice: 36000 }, { id: "menu-hokben-2", name: "Chicken Teriyaki", hpp: 24000, sellingPrice: 42000 }] },
@@ -46,16 +49,14 @@ export const demoData: AppData = {
     { id: "kol-2", influencer: "Arief Makan", platform: "TikTok", campaign: "Weekend Treats", content: "Review paket weekend", date: "2026-10-14", time: "16:00", status: "Selesai", rate: 5500000, spent: 5500000, paymentStatus: "Lunas", notes: "Insight menunggu upload" },
     { id: "kol-3", influencer: "Jalan-Jalan Yuk", platform: "Facebook", campaign: "Grand Opening BSD", content: "Video kunjungan outlet BSD", date: "2026-10-18", time: "12:00", status: "Draft", rate: 12000000, spent: 0, paymentStatus: "Belum dibayar", notes: "Menunggu konfirmasi jadwal" },
   ],
+  influencerThemes: [],
   transactions: [
     { category: "KOL & Influencer", vendor: "Nadia Kuliner", date: "08 Agu 2026", amount: 8500000, type: "Realisasi", status: "Sudah Dibayar", brand: "HBI" },
     { category: "Digital Ads", vendor: "Meta Ads", date: "07 Agu 2026", amount: 4200000, type: "Realisasi", status: "Sudah Dibayar", brand: "HokBen" },
     { category: "Produksi Konten", vendor: "Studio Kuning", date: "05 Agu 2026", amount: 3000000, type: "Rencana", status: "Belum Dibayar", brand: "HBI" },
   ],
   users: [
-    { ...demoAccount, status: "Aktif" },
-    { name: "Rani Putri", username: "rani.putri", email: "rani@hbi.co.id", whatsapp: "+6281312345678", role: "Creative Designer", status: "Aktif" },
-    { name: "Dimas Arya", username: "dimas.arya", email: "dimas@hbi.co.id", whatsapp: "+6281412345678", role: "Support Marketing", status: "Aktif" },
-    { name: "Sinta Dewi", username: "sinta.dewi", email: "sinta@hbi.co.id", whatsapp: "+6281512345678", role: "Tim Konten", status: "Aktif" },
+    ...demoAccounts.map(({ name, username, email, whatsapp, role, accessRole }) => ({ id: username, name, username, email, whatsapp, role, accessRole, status: "Aktif" })),
   ],
   socialAccounts: [
     { id: "ig-hbi", platform: "instagram", name: "HBI Indonesia", handle: "@hbi.indonesia", status: "connected", lastSync: "10 Okt 2026, 13:30", followers: 128400 },

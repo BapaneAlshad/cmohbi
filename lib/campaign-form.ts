@@ -1,4 +1,5 @@
 import type { Campaign } from "./types";
+import { formatDisplayDate, formatDisplayDateRange } from "./date-format.ts";
 
 export type BasicCampaignInput = {
   name: string;
@@ -15,16 +16,15 @@ export function validateCampaignPeriod(startDate?: string, endDate?: string) {
   return null;
 }
 
-function displayDate(value: string) {
-  return new Intl.DateTimeFormat("id-ID", { day: "2-digit", month: "short", year: "numeric" })
-    .format(new Date(`${value}T00:00:00`));
-}
-
 export function formatCampaignPeriod(startDate?: string | null, endDate?: string | null) {
   if (!startDate && !endDate) return "Periode belum ditentukan";
-  if (startDate && endDate) return `${displayDate(startDate)} — ${displayDate(endDate)}`;
-  if (startDate) return `Mulai ${displayDate(startDate)}`;
-  return `Selesai ${displayDate(endDate as string)}`;
+  if (startDate && endDate) return `${formatDisplayDate(startDate)} — ${formatDisplayDate(endDate)}`;
+  if (startDate) return `Mulai ${formatDisplayDate(startDate)}`;
+  return `Selesai ${formatDisplayDate(endDate)}`;
+}
+
+export function campaignPeriodLabel(campaign: Pick<Campaign, "startDate" | "endDate" | "period">) {
+  return campaign.startDate || campaign.endDate ? formatCampaignPeriod(campaign.startDate, campaign.endDate) : formatDisplayDateRange(campaign.period);
 }
 
 export function createBasicCampaign(id: string, input: BasicCampaignInput): Campaign {

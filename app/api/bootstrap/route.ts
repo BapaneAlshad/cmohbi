@@ -11,9 +11,9 @@ function bearerToken(request: NextRequest) {
 }
 
 function displayRole(jobTitle: string | null | undefined, membershipRole: string | null | undefined) {
-  if (jobTitle) return jobTitle;
+  if (jobTitle && !["CMO", "Admin", "CMO / Admin"].includes(jobTitle)) return jobTitle;
   if (membershipRole === "owner") return "Super Admin";
-  if (membershipRole === "admin") return "Admin";
+  if (membershipRole === "admin") return "Super Admin";
   if (membershipRole === "viewer") return "Viewer";
   return "Member";
 }
@@ -37,7 +37,7 @@ export async function POST(request: NextRequest) {
 
   const existingProfileResult = await admin
     .from("profiles")
-    .select("full_name, username, email, whatsapp, job_title")
+    .select("full_name, username, email, whatsapp, job_title, avatar_url")
     .eq("id", user.id)
     .maybeSingle();
   if (existingProfileResult.error) return NextResponse.json({ error: existingProfileResult.error.message }, { status: 500 });
@@ -47,8 +47,8 @@ export async function POST(request: NextRequest) {
   const rawUsername = String(existingProfile?.username || metadata.username || user.email?.split("@")[0] || `user_${user.id.slice(0, 8)}`);
   const username = normalizeUsername(rawUsername);
   const fullName = String(existingProfile?.full_name || metadata.full_name || metadata.name || "Pengguna HBI");
-  const profileEmail = String(existingProfile?.email || metadata.email || "").trim().toLowerCase();
-  const whatsapp = String(existingProfile?.whatsapp || metadata.whatsapp || "").trim();
+  const profileEmail = String(existingProfile ? existingProfile.email || "" : metadata.email || "").trim().toLowerCase();
+  const whatsapp = String(existingProfile ? existingProfile.whatsapp || "" : metadata.whatsapp || "").trim();
   const profilePayload: Record<string, string> = {
     id: user.id,
     username: isValidUsername(username) ? username : `user_${user.id.slice(0, 8)}`,
@@ -57,9 +57,12 @@ export async function POST(request: NextRequest) {
     whatsapp,
     updated_at: new Date().toISOString(),
   };
-  if (!existingProfile) profilePayload.job_title = "CMO";
-  const { error: profileError } = await admin.from("profiles").upsert(profilePayload);
-  if (profileError) return NextResponse.json({ error: profileError.message }, { status: 500 });
+  // Existing profiles are managed exclusively by Super Admin, never login metadata.
+  if (!existingProfile) {
+    profilePayload.job_title = "Super Admin";
+    const { error: profileError } = await admin.from("profiles").insert(profilePayload);
+    if (profileError) return NextResponse.json({ error: profileError.message }, { status: 500 });
+  }
 
   const membershipResult = await admin
     .from("workspace_members")
@@ -156,7 +159,8 @@ export async function POST(request: NextRequest) {
       email: profileEmail,
       whatsapp,
       role: displayRole(existingProfile?.job_title, membershipRole),
-      accessRole: membershipRole || "member",
+      accessRole: membershipRole === "admin" ? "owner" : membershipRole || "member",
+      avatarUrl: existingProfile?.avatar_url || null,
     },
   });
 }

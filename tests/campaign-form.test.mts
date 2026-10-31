@@ -36,7 +36,7 @@ test("campaign dasar dapat dibuat tanpa periode dan tanpa data lanjutan dummy", 
 test("periode lengkap diformat dan tanggal selesai sebelum mulai ditolak", () => {
   assert.equal(validateCampaignPeriod("2026-10-19", "2026-10-18"), "Tanggal selesai tidak boleh lebih awal dari tanggal mulai.");
   assert.equal(validateCampaignPeriod("2026-10-19", "2026-10-19"), null);
-  assert.equal(formatCampaignPeriod("2026-10-19", "2026-10-31"), "19 Okt 2026 — 31 Okt 2026");
+  assert.equal(formatCampaignPeriod("2026-10-19", "2026-10-31"), "19 Oktober 2026 — 31 Oktober 2026");
 
   assert.throws(
     () => createBasicCampaign("campaign-2", {

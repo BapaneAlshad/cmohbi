@@ -1,7 +1,14 @@
 import { useState, type ReactNode } from "react";
-import type { AppData, Task } from "@/lib/types";
-import { Avatar, Icon, PriorityPill, rupiah, StatusPill } from "@/components/ui";
+import type { AppData, Campaign, CampaignTimelinePhase, Task, UserIdentity } from "@/lib/types";
+import { Avatar, Icon, TaskPriorityStar, rupiah, StatusPill } from "@/components/ui";
+import { allowedTaskStatuses, isTaskManager, taskIsPriority, taskStatuses } from "@/lib/task-workflow";
+import { datedPhase, phaseColor, phasePeriodLabel, phaseTimeState } from "@/lib/campaign-timeline";
 import { formatCampaignPeriod } from "@/lib/campaign-form";
+import { formatDisplayDate, formatDisplayDateRange, formatDisplayDateTime, formatTaskDeadline } from "@/lib/date-format";
+import { displayInfluencerBookingStatus, displayInfluencerPaymentStatus, influencerBookingStatusTone, influencerPaymentStatusTone } from "@/lib/campaign-influencer";
+import { canManageUsers } from "@/lib/user-management";
+import { TaskAssigneeAvatars, TaskAssigneePicker } from "@/components/task-assignees";
+import type { TaskStatus, User } from "@/lib/types";
 
 export function PresentationBadge({ children = "Draf tampilan" }: { children?: ReactNode }) {
   return <span className="campaign-source-badge"><Icon name="info" size={12} />{children}</span>;
@@ -13,6 +20,13 @@ export function IntegrationNotice({ children, tone = "blue" }: { children: React
 
 export function EmptyCampaignState({ icon = "sparkles", title, description, action }: { icon?: string; title: string; description: string; action?: ReactNode }) {
   return <div className="campaign-empty-state"><span className="campaign-empty-icon"><Icon name={icon} size={18} /></span><strong>{title}</strong><p>{description}</p>{action}</div>;
+}
+
+export function CampaignAvatar({ src, fallbackSrc, initials }: { src?: string | null; fallbackSrc?: string | null; initials: string }) {
+  const [failedUrl, setFailedUrl] = useState<string | null>(null);
+  const imageUrl = src && failedUrl !== src ? src : fallbackSrc && failedUrl !== fallbackSrc ? fallbackSrc : null;
+  if (!imageUrl) return <div className="campaign-brand campaign-avatar-fallback" aria-hidden="true">{initials}</div>;
+  return <img className="campaign-avatar" src={imageUrl} alt="" onError={() => setFailedUrl(imageUrl)} />;
 }
 
 export function CampaignSectionHeader({ icon, title, description, action }: { icon: string; title: string; description?: string; action?: ReactNode }) {
@@ -38,18 +52,31 @@ export function BudgetProgress({ budget, spent, compact = false }: { budget: num
 export type CampaignPromo = { id: string; title: string; period: string; startDate?: string; endDate?: string; summary?: string; detail: string; status: string };
 
 export function PromoCard({ promo }: { promo: CampaignPromo }) {
-  return <article className="campaign-promo-card"><div className="campaign-card-row"><StatusPill status={promo.status} /><span>{promo.period}</span></div><h3>{promo.title}</h3>{promo.summary && <p>{promo.summary}</p>}<div className="campaign-promo-detail">{promo.detail}</div><PresentationBadge /></article>;
+  return <article className="campaign-promo-card"><div className="campaign-card-row"><StatusPill status={promo.status} /><span>{promo.startDate || promo.endDate ? formatCampaignPeriod(promo.startDate, promo.endDate) : formatDisplayDateRange(promo.period)}</span></div><h3>{promo.title}</h3>{promo.summary && <p>{promo.summary}</p>}<div className="campaign-promo-detail">{promo.detail}</div><PresentationBadge /></article>;
 }
 
-export type CampaignPhase = { id: string; name: string; period: string; purpose: string; status: string };
+export type CampaignPhase = CampaignTimelinePhase;
 
-export function PhaseCard({ phase, index, selected, taskCount, onSelect }: { phase: CampaignPhase; index: number; selected: boolean; taskCount: number; onSelect: () => void }) {
-  return <button type="button" className={`campaign-phase-card ${selected ? "selected" : ""}`} onClick={onSelect}><span className="campaign-phase-number">{String(index + 1).padStart(2, "0")}</span><span className="campaign-phase-copy"><strong>{phase.name}</strong><small>{phase.period}</small><span>{taskCount} tugas</span></span><StatusPill status={phase.status} /></button>;
+export function PhaseCard({ phase, index, selected, taskCount, today, onSelect, onEdit }: { phase: CampaignPhase; index: number; selected: boolean; taskCount: number; today: string; onSelect: () => void; onEdit?: () => void }) {
+  const state = phaseTimeState(phase, today);
+  return <div className={`campaign-phase-item ${selected ? "selected" : ""}`}><button type="button" className="campaign-phase-card" onClick={onSelect} aria-pressed={selected}><span className="campaign-phase-number" style={{ color: phaseColor(phase, index) }}>{String(index + 1).padStart(2, "0")}</span><span className="campaign-phase-copy"><strong>{phase.name}</strong><small>{phasePeriodLabel(phase)}</small><span>{taskCount} tugas</span><small className={state === "Sedang berlangsung" ? "phase-time-active" : ""}>{state}</small></span></button>{onEdit && <button type="button" className="phase-edit-button" onClick={onEdit} aria-label={`Edit fase ${phase.name}`}><Icon name="edit" size={12} />{datedPhase(phase) ? "Edit fase" : "Atur tanggal fase"}</button>}</div>;
 }
 
-export function CampaignTaskRow({ task, onToggle, phaseName, phaseOptions = [], phaseId = "", onPhaseChange, readOnly = false }: { task: Task; onToggle: () => void; phaseName?: string; phaseOptions?: CampaignPhase[]; phaseId?: string; onPhaseChange?: (phaseId: string) => void; readOnly?: boolean }) {
-  const done = task.status === "Done";
-  return <div className={`campaign-task-row ${done ? "done" : ""}`}><button type="button" className="campaign-task-check" onClick={onToggle} disabled={readOnly} title={readOnly ? "Akses baca saja" : undefined} aria-label={done ? `Buka kembali ${task.title}` : `Tandai ${task.title} selesai`}><Icon name={done ? "check" : "circle"} size={13} /></button><div className="campaign-task-copy"><strong>{task.title}</strong><p>{phaseName ? `${phaseName} · ` : ""}{task.pic} · Tenggat {task.due}</p></div>{onPhaseChange && phaseOptions.length > 0 && <label className="campaign-task-phase"><span>Fase</span><select value={phaseId} onChange={(event) => onPhaseChange(event.target.value)} disabled={readOnly} aria-label={`Fase untuk ${task.title}`}><option value="">Tanpa fase</option>{phaseOptions.map((phase) => <option value={phase.id} key={phase.id}>{phase.name}</option>)}</select></label>}<PriorityPill priority={task.priority} /><StatusPill status={task.status} /></div>;
+export function CampaignTaskRow({ task, campaign, users = [], identity, onToggle, onStatusChange, onAssigneesChange, phaseName, phaseOptions = [], phaseId = "", onPhaseChange, onEdit, compact = false, readOnly = false }: { task: Task; campaign?: Campaign; users?: User[]; identity?: UserIdentity; onToggle: () => void; onStatusChange?: (status: TaskStatus) => void; onAssigneesChange?: (ids: string[]) => void | Promise<void>; phaseName?: string; phaseOptions?: CampaignPhase[]; phaseId?: string; onPhaseChange?: (id: string) => void; onEdit?: () => void; compact?: boolean; readOnly?: boolean }) {
+  const done = task.status === "Done", manager = identity ? isTaskManager(identity) : !readOnly;
+  const superAdmin = canManageUsers(identity);
+  const allowed = readOnly ? [] : identity ? allowedTaskStatuses(task, users, identity) : taskStatuses;
+  const options = Array.from(new Set([task.status, ...allowed]));
+  return <div className={`campaign-task-row ${done ? "done" : ""} ${task.pendingStatusRequest ? "campaign-task-awaiting" : ""}`}>
+    <button type="button" className="campaign-task-check" onClick={onToggle} disabled={readOnly || !manager || Boolean(task.pendingStatusRequest)} aria-label={done ? `Buka kembali ${task.title}` : `Tandai ${task.title} selesai`}><Icon name={done ? "check" : "circle"} size={13} /></button>
+    <div className="campaign-task-copy"><strong>{task.title}</strong><p>{phaseName ? `${phaseName} · ` : ""}Deadline {formatTaskDeadline(task, campaign)}</p>{task.pendingStatusRequest && <small className="task-request-label">Menunggu persetujuan · {task.pendingStatusRequest.toStatus}</small>}</div>
+    <TaskAssigneeAvatars task={task} users={users} />
+    {manager && !superAdmin && !compact && <TaskAssigneePicker users={users} selectedIds={task.assigneeIds} legacyPic={task.pic} disabled={readOnly || !onAssigneesChange} name={`assigneeIds-${task.id}`} onSelectionChange={onAssigneesChange} />}
+    {manager && !superAdmin && onPhaseChange && phaseOptions.length > 0 && <label className="campaign-task-phase"><span>Fase</span><select value={phaseId} onChange={(event) => onPhaseChange(event.target.value)} disabled={readOnly} aria-label={`Fase untuk ${task.title}`}><option value="">Tanpa fase</option>{phaseOptions.map((phase) => <option value={phase.id} key={phase.id}>{phase.name}</option>)}</select></label>}
+    <TaskPriorityStar active={taskIsPriority(task)} />
+    {onStatusChange && allowed.length ? <select className="campaign-task-status" value={task.status} onChange={(event) => onStatusChange(event.target.value as TaskStatus)} aria-label={`Status ${task.title}`}>{options.map((status) => <option key={status}>{status}</option>)}</select> : <StatusPill status={task.status} />}
+    {onEdit && manager && !readOnly && <button type="button" className="button button-soft button-sm campaign-task-edit" onClick={onEdit} aria-label={`Edit ${task.title}`}><Icon name="edit" size={13} />Edit</button>}
+  </div>;
 }
 
 export type CreativeReference = { id: string; title: string; url: string; kind: string; startDate?: string; endDate?: string; mimeType?: string; source?: "backend" | "presentation" };
@@ -61,11 +88,11 @@ export function CreativeReferenceCard({ reference }: { reference: CreativeRefere
 }
 
 export function InfluencerBriefCard({ item }: { item: AppData["influencerSchedules"][number] }) {
-  return <article className="campaign-content-card"><div className="campaign-content-icon influencer"><Icon name="users" size={18} /></div><div className="campaign-content-copy"><div className="campaign-card-row"><strong>{item.content}</strong><StatusPill status={item.status} /></div><p>{item.platform} · {item.influencer} · {item.date} {item.time} WIB</p><div className="campaign-content-details"><span><b>Catatan</b>{item.notes || "Belum ada catatan brief."}</span><span><b>Pembayaran</b>{item.paymentStatus}</span></div><small>Sumber: Jadwal Influencer yang terhubung ke campaign</small></div></article>;
+  return <article className="campaign-content-card"><div className="campaign-content-icon influencer"><Icon name="users" size={18} /></div><div className="campaign-content-copy"><div className="campaign-card-row"><strong>{item.themeName || item.content}</strong><StatusPill status={displayInfluencerBookingStatus(item.status)} className={`campaign-influencer-status-pill cooperation-${influencerBookingStatusTone(item.status)}`} /></div><p>{item.platform} · {item.influencer} · Visit {formatDisplayDate(item.visitDate, { empty: "belum diatur" })} · Upload {formatDisplayDate(item.uploadDate === undefined ? item.date : item.uploadDate, { empty: "belum diatur" })}</p><div className="campaign-content-details"><span><b>Rate / spent</b>{rupiah(item.rate)} / {rupiah(item.spent)}</span><span><b>Pembayaran</b><StatusPill status={displayInfluencerPaymentStatus(item.paymentStatus)} className={`campaign-influencer-status-pill payment-${influencerPaymentStatusTone(item.paymentStatus)}`} /></span>{item.notes && <span><b>Catatan</b>{item.notes}</span>}</div><small>Sumber: booking influencer yang terhubung ke campaign</small></div></article>;
 }
 
 export type CampaignNoteItem = { id: string; author: string; body: string; createdAt: string; pinned: boolean; replyTo?: string };
 
-export function CampaignNote({ note, onReply, onPin, readOnly = false }: { note: CampaignNoteItem; onReply: () => void; onPin: () => void; readOnly?: boolean }) {
-  return <article className="campaign-note"><Avatar name={note.author} /><div className="campaign-note-body"><div className="campaign-note-meta"><strong>{note.author}</strong><time>{note.createdAt}</time>{note.pinned && <span className="campaign-note-pin"><Icon name="pin" size={11} />Dipin</span>}</div>{note.replyTo && <div className="campaign-note-reply">Membalas catatan sebelumnya</div>}<p>{note.body}</p>{!readOnly && <div className="campaign-note-actions"><button type="button" onClick={onReply}><Icon name="reply" size={12} />Balas</button><button type="button" onClick={onPin}><Icon name="pin" size={12} />{note.pinned ? "Lepas pin" : "Pin catatan"}</button></div>}</div></article>;
+export function CampaignNote({ note, onReply, onPin, readOnly = false, canPin = true }: { note: CampaignNoteItem; onReply: () => void; onPin: () => void; readOnly?: boolean; canPin?: boolean }) {
+  return <article className="campaign-note"><Avatar name={note.author} /><div className="campaign-note-body"><div className="campaign-note-meta"><strong>{note.author}</strong><time>{formatDisplayDateTime(note.createdAt)}</time>{note.pinned && <span className="campaign-note-pin"><Icon name="pin" size={11} />Tampil di dashboard</span>}</div>{note.replyTo && <div className="campaign-note-reply">Membalas catatan sebelumnya</div>}<p>{note.body}</p>{!readOnly && <div className="campaign-note-actions"><button type="button" onClick={onReply}><Icon name="reply" size={12} />Balas</button>{canPin && <button type="button" onClick={onPin}><Icon name="pin" size={12} />{note.pinned ? "Lepas dari dashboard" : "Pin ke dashboard"}</button>}</div>}</div></article>;
 }
