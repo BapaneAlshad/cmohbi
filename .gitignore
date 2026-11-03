@@ -3,5 +3,8 @@
 node_modules
 .env
 .env.local
+.ngapaya-super-admin.local.json
 *.tsbuildinfo
 next-env.d.ts
+*.log
+supabase/.temp/

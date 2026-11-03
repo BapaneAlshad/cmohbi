@@ -11,7 +11,7 @@ import { formatTaskDeadline } from "@/lib/date-format";
 
 export function TodoView({ data, identity, mutateTask, openTaskEditor, decideTaskStatus, refreshTaskBoard, taskBoardError, notify }: CommonProps) {
   const manager = isTaskManager(identity);
-  const [filters, setFilters] = useState<{ brand: string; pic: "all" | "mine"; campaign: string }>({ brand: "all", pic: "all", campaign: "all" });
+  const [filters, setFilters] = useState<{ brand: string; pic: string; campaign: string }>({ brand: "all", pic: "all", campaign: "all" });
   const [activeId, setActiveId] = useState<EntityId | null>(null);
   const [mobile, setMobile] = useState(false);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }), useSensor(KeyboardSensor));
@@ -40,7 +40,7 @@ export function TodoView({ data, identity, mutateTask, openTaskEditor, decideTas
     {taskBoardError && <div className="task-board-error" role="alert"><span>{taskBoardError}</span><button className="button button-soft button-sm" onClick={() => void refreshTaskBoard()}>Coba lagi</button></div>}
     <div className="toolbar todo-filters"><div className="toolbar-left">
       <label className="filter-chip"><span>Brand</span><select className="select-clean" aria-label="Filter berdasarkan brand" value={filters.brand} onChange={(event) => setFilters({ ...filters, brand: event.target.value, campaign: "all" })}><option value="all">Semua brand</option>{brands.map((brand) => <option key={brand}>{brand}</option>)}</select></label>
-      <label className="filter-chip"><span>PIC</span><select className="select-clean" aria-label="Filter berdasarkan PIC" value={filters.pic} onChange={(event) => setFilters({ ...filters, pic: event.target.value as "all" | "mine" })}><option value="all">Semua</option><option value="mine">Hanya saya</option></select></label>
+      <label className="filter-chip"><span>PIC</span><select className="select-clean" aria-label="Filter berdasarkan PIC" value={filters.pic} onChange={(event) => setFilters({ ...filters, pic: event.target.value })}><option value="all">Semua</option><option value="mine">Hanya saya</option>{manager && data.users.map((user) => <option key={String(user.id ?? user.username)} value={String(user.id ?? user.username)}>{user.name}</option>)}</select></label>
       <label className="filter-chip"><span>Campaign</span><select className="select-clean" aria-label="Filter berdasarkan campaign" value={filters.campaign} onChange={(event) => setFilters({ ...filters, campaign: event.target.value })}><option value="all">Semua campaign</option><option value="none">Tanpa campaign</option>{campaigns.map((campaign) => <option value={String(campaign.id)} key={String(campaign.id)}>{campaign.name}</option>)}</select></label>
     </div><button className="button button-soft button-sm" onClick={() => setFilters({ brand: "all", pic: "all", campaign: "all" })}>Reset filter</button></div>
     <DndContext sensors={mobile || identity?.accessRole === "viewer" ? [] : sensors} collisionDetection={closestCenter} onDragStart={({ active }) => setActiveId(active.data.current?.taskId as EntityId)} onDragCancel={() => setActiveId(null)} onDragEnd={dragEnd}>

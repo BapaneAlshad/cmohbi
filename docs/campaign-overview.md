@@ -6,7 +6,7 @@ The overview contains only My Task, measurable KPIs, and task status activity.
 - KPI values are manual. Achievement is `current - baseline`; percentage is achievement divided by target increase. Only the visual bar is clamped to 0–100. Owner/admin writes are enforced by database RLS as well as the UI.
 - Existing textual `campaigns.kpi` is retained. No numerical target is guessed from legacy text.
 - Manager task edits use a per-task queue and the `update_marketing_task` RPC. The RPC updates task fields and assignees in one database transaction, including phase assignment where present. Members now submit status requests, governed by the [To-Do workflow](todo-workflow.md).
-- Workspace autosave inserts new tasks only. It no longer rewrites existing tasks or assignees; timeline autosave preserves assignments committed by task editing.
+- Workspace autosave never writes Campaigns, tasks or assignees. Campaign changes use the version-checked `save_campaign_record` RPC; task creation/editing uses the task-specific persistence path. Timeline updates preserve assignments committed by task editing.
 - The database status triggers record real task and influencer cooperation-status transitions, including actor, item/theme snapshots, campaign and timestamp. Payment changes are excluded. There is no historical backfill or client-side history insertion in live mode. Read access follows workspace membership; authenticated clients cannot modify history.
 - The overview combines both histories newest first, shows five items initially, then reveals all remaining items with **Lihat lainnya**. Demo KPIs and activity use browser storage; live activity uses the RLS-protected `campaign_activity_feed` view.
 

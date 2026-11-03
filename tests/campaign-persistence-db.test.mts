@@ -1,0 +1,63 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+import { PGlite } from "@electric-sql/pglite";
+
+test("Campaign RPC: confirmed create/edit, persistent brief/promos, stale-write rejection, atomic membership and tenant/role/archive guards", async () => {
+  const db = new PGlite();
+  const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12,"0")}`;
+  const ws=id(10), brand=id(11), campaign=id(12), secondBrand=id(13);
+  try {
+    await db.exec(`create role authenticated; create role anon; create role service_role; create schema auth; create schema private;
+      create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid $$;
+      grant usage on schema auth,private to authenticated;
+      create table public.workspace_members(workspace_id uuid,user_id uuid,role text);
+      create table public.brands(id uuid primary key,workspace_id uuid,name text);
+      create table public.tasks(id uuid primary key,campaign_id uuid);
+      create table public.campaigns(id uuid primary key,workspace_id uuid,name text,brand text,brand_id uuid,objective text,start_date date,end_date date,status text,progress numeric,budget numeric default 0,spent numeric default 0,created_by uuid,updated_by uuid,updated_at timestamptz,lifecycle_status text default 'active',avatar_url text,timeline_config jsonb default '{"phaseMode":false,"phases":[],"taskPhase":{}}');
+      create table public.campaign_members(workspace_id uuid,campaign_id uuid,user_id uuid,primary key(campaign_id,user_id));
+      create function public.is_workspace_manager(w uuid) returns boolean language sql security definer set search_path='' as $$ select exists(select 1 from public.workspace_members where workspace_id=w and user_id=auth.uid() and role in ('owner','admin')) $$;
+      insert into public.workspace_members values('${ws}','${id(1)}','owner'),('${ws}','${id(2)}','member'),('${ws}','${id(3)}','viewer'),('${id(20)}','${id(4)}','owner');
+      insert into public.brands values('${brand}','${ws}','Javacafe'),('${secondBrand}','${id(20)}','Other');
+      grant select on public.workspace_members,public.brands,public.tasks to authenticated;
+      grant select,update on public.campaigns to authenticated;
+      alter table public.campaigns enable row level security;
+      create policy read_campaign on public.campaigns for select to authenticated using(exists(select 1 from public.workspace_members where workspace_id=campaigns.workspace_id and user_id=auth.uid()));
+      create policy write_campaign on public.campaigns for update to authenticated using(public.is_workspace_manager(workspace_id)) with check(public.is_workspace_manager(workspace_id));
+    `);
+    await db.exec(await readFile(new URL("../supabase/migrations/20261030140000_brand_colors_and_phase_dates.sql",import.meta.url),"utf8"));
+    await db.exec(await readFile(new URL("../supabase/migrations/20261103043508_campaign_production_persistence.sql",import.meta.url),"utf8"));
+    const login=async(n:number)=>{await db.exec("reset role");await db.query("select set_config('request.jwt.claim.sub',$1,false)",[id(n)]);await db.exec("set role authenticated");};
+    const save=async(version:number|null,patch:object,campaignId=campaign,workspace=ws)=>(await db.query<{saved:Record<string,unknown>}>("select public.save_campaign_record($1,$2,$3,$4::jsonb) saved",[workspace,campaignId,version,JSON.stringify(patch)])).rows[0].saved;
+    await login(1);
+    const first=await save(null,{name:"Opening",brand_id:brand});
+    assert.equal(first.row_version,1); assert.equal(first.start_date,null); assert.equal(first.status,"Rencana");
+    assert.equal((await save(null,{name:"Opening",brand_id:brand})).row_version,1);
+    assert.equal((await db.query("select * from public.tasks")).rows.length,0);
+    await assert.rejects(save(null,{name:"Duplicate",brand_id:brand}),/CAMPAIGN_CONFLICT/);
+    const content={tagline:"Promo",bigMessage:"Pesan utama",intro:"Latar",instructions:"Instruksi",steps:["Foto produk"],promos:[{id:"promo-1",title:"Diskon",detail:"Syarat promo",period:"",status:"Draf",startDate:"2026-11-01",endDate:"2026-11-30"}]};
+    const updated=await save(1,{name:"Opening updated",content_config:content,member_ids:[id(2)]});
+    assert.equal(updated.row_version,2); assert.deepEqual(updated.content_config,content);
+    await assert.rejects(save(1,{name:"Overwrite from stale device"}),/CAMPAIGN_CONFLICT/);
+    assert.equal((await db.query<{name:string}>("select name from public.campaigns where id=$1",[campaign])).rows[0].name,"Opening updated");
+    await assert.rejects(save(2,{name:"Must rollback",member_ids:[id(4)]}),/workspace/);
+    await assert.rejects(save(2,{content_config:{...content,steps:"invalid"}}),/tidak valid/);
+    await assert.rejects(save(2,{content_config:{...content,promos:[{id:"x",title:"X",startDate:"2026-11-03",endDate:"2026-11-02"}]}}),/Periode promo/);
+    await assert.rejects(save(2,{start_date:"2026-11-10",end_date:"2026-11-09"}),/Tanggal selesai/);
+    await assert.rejects(save(2,{brand_id:secondBrand}),/workspace/);
+    const phases=[{id:"p1",name:"Teaser",startDate:"2026-11-01",endDate:"2026-11-07",color:"#2F9D78"}];
+    await save(2,{phase_mode:true,phases});
+    await db.query("update public.campaigns set timeline_config=jsonb_set(timeline_config,'{taskPhase}','{\"task-1\":\"p1\"}') where id=$1",[campaign]);
+    const latest=(await db.query<{row_version:number}>("select row_version from public.campaigns where id=$1",[campaign])).rows[0].row_version;
+    const phaseEdit=await save(Number(latest),{phases:[{...phases[0],name:"Updated"}]});
+    assert.deepEqual((phaseEdit.timeline_config as {taskPhase:object}).taskPhase,{"task-1":"p1"});
+    for(const who of [2,3,4]) {await login(who);await assert.rejects(save(Number(phaseEdit.row_version),{name:"Denied"}),/Super Admin/);}
+    await login(1);
+    await db.query("update public.campaigns set lifecycle_status='archived' where id=$1",[campaign]);
+    await assert.rejects(save(Number(phaseEdit.row_version)+1,{name:"Archive edit"}),/hanya dapat dibaca/);
+    await assert.rejects(save(null,{name:"Cross workspace",brand_id:secondBrand},id(30),id(20)),/Super Admin/);
+    await db.exec("reset role");
+    assert.deepEqual((await db.query("select user_id from public.campaign_members where campaign_id=$1",[campaign])).rows,[{user_id:id(2)}]);
+    assert.deepEqual((await db.query<{content_config:object}>("select content_config from public.campaigns where id=$1",[campaign])).rows[0].content_config,content);
+  } finally {await db.close();}
+});

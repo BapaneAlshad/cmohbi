@@ -71,3 +71,16 @@ export function validateInfluencerScheduleDates(visitDate: string, uploadDate: s
   if (visitDate && uploadDate && uploadDate < visitDate) return "Tanggal upload tidak boleh lebih awal dari tanggal visit.";
   return null;
 }
+
+export function validateInfluencerContentLink(value: string) {
+  const link = value.trim();
+  if (!link) return null;
+  if (link.length > 2048) return "Link konten maksimal 2.048 karakter.";
+  try {
+    const parsed = new URL(link);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return "Link konten harus menggunakan http:// atau https://.";
+  } catch {
+    return "Masukkan link konten yang valid.";
+  }
+  return null;
+}

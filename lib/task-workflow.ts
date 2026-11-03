@@ -23,13 +23,16 @@ export function allowedTaskStatuses(task: Task, users: AppData["users"], identit
   return identity.accessRole === "member" && isTaskAssignee(task, users, identity) ? memberTransitions[task.status] : [];
 }
 
-export function filteredBoardTasks(data: AppData, identity: UserIdentity | undefined, filters: { brand: string; pic: "all" | "mine"; campaign: string }) {
+export function filteredBoardTasks(data: AppData, identity: UserIdentity | undefined, filters: { brand: string; pic: string; campaign: string }) {
   const activeCampaigns = new Set(data.campaigns.filter((item) => item.lifecycleStatus === "active").map((item) => String(item.id)));
   return data.tasks.filter((task) =>
     (isTaskManager(identity) || task.status !== "Backlog") &&
     (task.campaign == null || activeCampaigns.has(String(task.campaign))) &&
     (filters.brand === "all" || task.brand === filters.brand) &&
-    (filters.pic === "all" || isTaskAssignee(task, data.users, identity)) &&
+    (filters.pic === "all" || (filters.pic === "mine" ? isTaskAssignee(task, data.users, identity) : isTaskManager(identity) && (() => {
+      const user = data.users.find((item) => String(item.id ?? item.username) === filters.pic);
+      return Boolean(user && isTaskAssignee(task, data.users, { ...user, id: user.id ?? user.username }));
+    })())) &&
     (filters.campaign === "all" || (filters.campaign === "none" ? task.campaign == null : String(task.campaign) === filters.campaign))
   );
 }

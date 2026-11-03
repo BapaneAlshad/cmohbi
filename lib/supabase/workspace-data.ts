@@ -1,3 +1,5 @@
+import { emptyWorkspaceData } from "../production-policy";
+import { emptyCampaignContent } from "../campaign-persistence";
 import { mapPendingRequest } from "./task-board-data";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { AppData, CampaignTimelineConfig, ContentItem, EntityId, TaskStatus } from "@/lib/types";
@@ -91,15 +93,6 @@ function normalizeCampaignTimelineConfig(value: unknown): CampaignTimelineConfig
   };
 }
 
-async function upsertCampaignRows(client: SupabaseClient, campaigns: Array<Record<string, unknown>>) {
-  const result = await client.from("campaigns").upsert(campaigns, { onConflict: "id" });
-  if (!isMissingCampaignPresentationColumn(result.error)) return result;
-  const legacyRows = campaigns.map((campaign) => Object.fromEntries(
-    Object.entries(campaign).filter(([column]) => column !== "avatar_url" && column !== "timeline_config"),
-  ));
-  return client.from("campaigns").upsert(legacyRows, { onConflict: "id" });
-}
-
 function isUuid(value: EntityId | null | undefined): value is string {
   return typeof value === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }
@@ -116,8 +109,9 @@ export async function loadWorkspaceData(
   fallback: AppData,
   currentUserEmail: string,
 ): Promise<AppData> {
+  fallback = emptyWorkspaceData();
   const [campaignResult, taskResult, memberResult, bookingResult, themeResult, accountResult, metricResult, postResult, inboxResult, requestResult, influencerResult, transactionResult, brandResult, brandMenuResult, notificationResult, campaignMembersResult, campaignNotesResult, adminNotesResult, adminNoteRecipientsResult] = await Promise.all([
-    client.from("campaigns").select("*").eq("workspace_id", workspaceId).order("created_at", { ascending: false }),
+    client.from("campaigns").select("*,campaign_members(user_id)").eq("workspace_id", workspaceId).order("created_at", { ascending: false }),
     client.from("tasks").select("*").eq("workspace_id", workspaceId).order("created_at", { ascending: true }),
     client.from("workspace_members").select("user_id, role").eq("workspace_id", workspaceId),
     client.from("influencer_bookings").select("*").eq("workspace_id", workspaceId).order("scheduled_at", { ascending: true }),
@@ -140,9 +134,13 @@ export async function loadWorkspaceData(
 
   const firstError = campaignResult.error || taskResult.error || memberResult.error;
   if (firstError) throw firstError;
+  for (const result of [bookingResult, themeResult, brandResult, brandMenuResult, campaignMembersResult, campaignNotesResult]) {
+    if (result.error) throw new Error(`Database Campaign belum siap: ${result.error.message}`);
+  }
 
   const taskRequestsResult = await client.from("task_status_requests").select("*").eq("workspace_id", workspaceId).eq("state", "pending");
 
+  if (taskRequestsResult.error) throw taskRequestsResult.error;
   const memberIds = (memberResult.data ?? []).map((member) => member.user_id);
   const profileResult = memberIds.length
     ? await client.from("profiles").select("id, full_name, username, email, whatsapp, job_title, avatar_url").in("id", memberIds)
@@ -301,7 +299,7 @@ export async function loadWorkspaceData(
     requests,
     influencers,
     transactions,
-    campaignMembers: campaignMembersResult.error ? [] : (campaignMembersResult.data ?? []).map((item) => ({ campaignId: item.campaign_id, userId: item.user_id })),
+    campaignMembers: campaignRows.flatMap((campaign) => (campaign.campaign_members || []).map((member: { user_id: string }) => ({ campaignId: campaign.id, userId: member.user_id }))),
     campaignNotes: campaignNotesResult.error ? [] : (campaignNotesResult.data ?? []).map((item) => ({ id: item.id, campaignId: item.campaign_id, authorId: item.author_id, authorName: item.author_name, body: item.body, replyTo: item.reply_to, pinnedToDashboard: item.pinned_to_dashboard, createdAt: item.created_at })),
     adminDashboardNotes: adminNotesResult.error ? [] : (adminNotesResult.data ?? []).map((item) => ({ id: item.id, title: item.title, body: item.body, createdBy: item.created_by, createdByName: item.created_by_name, recipientIds: recipientsByNote.get(item.id) || [], expiresAt: item.expires_at, isActive: item.is_active, createdAt: item.created_at, updatedAt: item.updated_at })),
     campaigns: campaignRows.map((campaign) => ({
@@ -310,6 +308,8 @@ export async function loadWorkspaceData(
       brand: brandNameById.get(campaign.brand_id) ?? campaign.brand,
       brandId: campaign.brand_id || null,
       avatarUrl: campaign.avatar_url || null,
+      rowVersion: Number(campaign.row_version),
+      contentConfig: campaign.content_config || emptyCampaignContent(),
       timelineConfig: normalizeCampaignTimelineConfig(campaign.timeline_config),
       objective: campaign.objective || "",
       startDate: campaign.start_date,
@@ -359,6 +359,7 @@ export async function loadWorkspaceData(
         visitDate: booking.visit_date === undefined ? undefined : booking.visit_date || null,
         uploadDate: booking.upload_date === undefined ? undefined : booking.upload_date || null,
         content: booking.content_title,
+        contentLink: booking.content_link === undefined ? undefined : booking.content_link || null,
         date: String(booking.scheduled_at).slice(0, 10),
         time: String(booking.scheduled_at).slice(11, 16),
         status: booking.status,
@@ -404,99 +405,18 @@ export async function saveWorkspaceData(
   userId: string,
   data: AppData,
 ) {
-  const [existingCampaignAuditResult, existingTaskResult, existingRequestResult, existingBrandResult, existingBrandMenuResult] = await Promise.all([
-    client.from("campaigns").select("id, owner_id, created_by, spent").eq("workspace_id", workspaceId),
-    client.from("tasks").select("id, assignee_id, created_by").eq("workspace_id", workspaceId),
+  const [existingRequestResult, existingBrandResult, existingBrandMenuResult] = await Promise.all([
     client.from("marketing_requests").select("id, pic_id").eq("workspace_id", workspaceId),
     client.from("brands").select("id").eq("workspace_id", workspaceId),
     client.from("brand_menus").select("id").eq("workspace_id", workspaceId),
   ]);
-  let campaignAuditColumnsAvailable = true;
-  let existingCampaignRows: Array<{ id: string; owner_id: string | null; created_by?: string | null; spent: number }>;
-  if (existingCampaignAuditResult.error && isMissingCampaignAuditColumn(existingCampaignAuditResult.error)) {
-    campaignAuditColumnsAvailable = false;
-    const legacyCampaignResult = await client.from("campaigns").select("id, owner_id, spent").eq("workspace_id", workspaceId);
-    if (legacyCampaignResult.error) throw legacyCampaignResult.error;
-    existingCampaignRows = legacyCampaignResult.data ?? [];
-  } else {
-    if (existingCampaignAuditResult.error) throw existingCampaignAuditResult.error;
-    existingCampaignRows = existingCampaignAuditResult.data ?? [];
-  }
-  if (existingTaskResult.error) throw existingTaskResult.error;
   if (existingRequestResult.error && !isMissingOperationalTable(existingRequestResult.error)) throw existingRequestResult.error;
   if (existingBrandResult.error && !isMissingBrandTable(existingBrandResult.error)) throw existingBrandResult.error;
   if (existingBrandMenuResult.error && !isMissingBrandTable(existingBrandMenuResult.error)) throw existingBrandMenuResult.error;
 
-  const existingCampaignById = new Map(existingCampaignRows.map((campaign) => [campaign.id, campaign]));
-  const existingTaskById = new Map((existingTaskResult.data ?? []).map((task) => [task.id, task]));
   const existingRequestById = new Map((existingRequestResult.data ?? []).map((request) => [request.id, request]));
   const brandIdByName = new Map((data.brands || []).map((brand) => [brand.name, brand.id]));
   const brandPersistenceAvailable = !existingBrandResult.error && !existingBrandMenuResult.error;
-  const campaigns = data.campaigns
-    .filter((campaign) => typeof campaign.id === "string")
-    .map((campaign) => {
-      const existingCampaign = existingCampaignById.get(campaign.id as string);
-      return {
-        id: campaign.id,
-        workspace_id: workspaceId,
-        name: campaign.name,
-        brand: campaign.brand,
-        ...(brandPersistenceAvailable ? { brand_id: brandIdByName.get(campaign.brand) || campaign.brandId || null } : {}),
-        objective: campaign.objective || null,
-        kpi: campaign.kpi,
-        budget: campaign.budget,
-        // Payment RPCs and booking triggers own realized spend. Re-read the DB value
-        // so this broad workspace autosave cannot restore a stale client amount.
-        spent: Number(existingCampaign?.spent ?? campaign.spent),
-        status: campaign.status,
-        progress: campaign.progress,
-        owner_id: existingCampaign?.owner_id ?? null,
-        ...(campaignAuditColumnsAvailable ? {
-          created_by: existingCampaign?.created_by ?? userId,
-          updated_by: userId,
-          updated_at: new Date().toISOString(),
-        } : {}),
-        start_date: campaign.startDate || null,
-        end_date: campaign.endDate || null,
-        lifecycle_status: campaign.lifecycleStatus,
-        archived_at: campaign.archivedAt || null,
-        archived_by: campaign.archivedBy || null,
-        deleted_at: campaign.deletedAt || null,
-        deleted_by: campaign.deletedBy || null,
-        previous_lifecycle_status: campaign.previousLifecycleStatus || null,
-        avatar_url: campaign.avatarUrl || null,
-        ...(!existingCampaign ? { timeline_config: campaign.timelineConfig || { phaseMode: false, phases: [], taskPhase: {} } } : {}),
-      };
-    });
-
-  const desiredTaskAssignees = data.tasks
-    .filter((task) => typeof task.id === "string" && !existingTaskById.has(task.id))
-    .flatMap((task) => {
-      const selectedIds = task.assigneeIds ?? (task.pic && task.pic !== "Belum ditentukan"
-        ? [data.users.find((user) => user.name === task.pic || user.username === task.pic)?.id ?? ""]
-        : []);
-      return [...new Set(selectedIds.filter(isUuid))].map((userId) => ({ task_id: task.id as string, user_id: userId }));
-    });
-
-  const tasks = data.tasks
-    .filter((task) => typeof task.id === "string" && !existingTaskById.has(task.id))
-    .map((task) => ({
-      id: task.id,
-      workspace_id: workspaceId,
-      campaign_id: typeof task.campaign === "string" ? task.campaign : null,
-      title: task.title,
-      ...(brandPersistenceAvailable ? { brand_id: brandIdByName.get(task.brand) || task.brandId || null } : {}),
-      status: taskStatusToDatabase[task.status],
-      priority: task.priority,
-      due_date: task.dueDate || (/^\d{4}-\d{2}-\d{2}$/.test(task.due) ? task.due : null),
-      ...(task.contentCalendarType ? { content_calendar_type: task.contentCalendarType } : {}),
-      assignee_id: task.assigneeIds
-        ? (desiredTaskAssignees.find((assignee) => assignee.task_id === task.id)?.user_id ?? null)
-        : (desiredTaskAssignees.find((assignee) => assignee.task_id === task.id)?.user_id ?? existingTaskById.get(task.id)?.assignee_id ?? null),
-      created_by: existingTaskById.get(task.id)?.created_by ?? userId,
-      updated_at: new Date().toISOString(),
-    }));
-
   // Campaign influencer themes/bookings use explicit transactional saves for all roles.
   // Bulk autosave must not overwrite newer edits made by another team member.
 
@@ -603,34 +523,8 @@ export async function saveWorkspaceData(
     .filter((item) => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(item.id))
     .map((item) => client.from("social_inbox").update({ status: item.status, updated_at: new Date().toISOString() }).eq("id", item.id));
 
-  const taskUpsertResult = tasks.length ? await client.from("tasks").upsert(tasks, { onConflict: "id", ignoreDuplicates: true }).select("id") : { data: [], error: null };
-  if (taskUpsertResult.error) {
-    if (isMissingTaskCalendarColumn(taskUpsertResult.error) && tasks.some((task) => task.content_calendar_type)) {
-      throw new Error("Database belum memiliki jenis jadwal konten. Terapkan migration add_campaign_content_calendar_type terlebih dahulu.");
-    }
-    throw taskUpsertResult.error;
-  }
-  const insertedTaskIds = new Set((taskUpsertResult.data || []).map((task) => task.id));
-  const initialAssignees = desiredTaskAssignees.filter((row) => insertedTaskIds.has(row.task_id));
-  if (initialAssignees.length) {
-    const result = await client.from("task_assignees").upsert(initialAssignees, { onConflict: "task_id,user_id", ignoreDuplicates: true });
-    if (result.error && !isMissingTaskAssigneesTable(result.error)) throw result.error;
-  }
   const influencerUpsertResult = influencers.length ? await client.from("marketing_influencers").upsert(influencers, { onConflict: "id" }) : { error: null };
   if (influencerUpsertResult.error && !isMissingOperationalTable(influencerUpsertResult.error)) throw influencerUpsertResult.error;
-  const campaignUpsertResult = campaigns.length ? await upsertCampaignRows(client, campaigns) : { error: null };
-  if (campaignUpsertResult.error) throw campaignUpsertResult.error;
-  // Timeline configuration is saved explicitly; autosave must not overwrite newer phase edits.
-  for (const campaign of data.campaigns.filter((item) => isUuid(item.id) && item.timelineConfig && item.lifecycleStatus === "active")) {
-    for (const task of data.tasks.filter((item) => insertedTaskIds.has(String(item.id)) && String(item.campaign) === String(campaign.id))) {
-      const phaseId = campaign.timelineConfig!.taskPhase[String(task.id)];
-      if (phaseId) {
-        const result = await client.rpc("update_marketing_task", { p_task_id: task.id, p_patch: { phase_id: phaseId } });
-        if (result.error) throw result.error;
-      }
-    }
-  }
-
   const results = await Promise.all([
     socialPosts.length ? client.from("social_posts").upsert(socialPosts, { onConflict: "id" }) : Promise.resolve({ error: null }),
     requests.length ? client.from("marketing_requests").upsert(requests, { onConflict: "id" }) : Promise.resolve({ error: null }),

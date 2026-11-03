@@ -1,13 +1,12 @@
 import "server-only";
 
 import { createClient } from "@supabase/supabase-js";
+import { serverPublicSupabaseConfig } from "./config";
 
 export function createSupabaseAuthVerifier() {
-  const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
-    || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if (!url || !key) return null;
-  return createClient(url, key, {
+  const config = serverPublicSupabaseConfig();
+  if (!config) return null;
+  return createClient(config.url, config.key, {
     auth: {
       autoRefreshToken: false,
       persistSession: false,

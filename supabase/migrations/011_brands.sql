@@ -61,9 +61,9 @@ where campaign.brand_id is null
   and trim(campaign.brand) = brand.name;
 update public.tasks task
 set brand_id = brand.id
-from public.brands brand
-join public.campaigns campaign on campaign.id = task.campaign_id
+from public.brands brand, public.campaigns campaign
 where task.brand_id is null
+  and campaign.id = task.campaign_id
   and task.workspace_id = brand.workspace_id
   and trim(campaign.brand) = brand.name;
 update public.marketing_transactions transaction_row

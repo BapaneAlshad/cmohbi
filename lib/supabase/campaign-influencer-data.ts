@@ -37,7 +37,7 @@ export async function persistCampaignInfluencerPayment(client: SupabaseClient, c
     themeId: row.campaign_influencer_theme_id ? String(row.campaign_influencer_theme_id) : null,
     themeName: row.theme_name ? String(row.theme_name) : undefined,
     visitDate: row.visit_date ? String(row.visit_date) : null, uploadDate: row.upload_date ? String(row.upload_date) : null,
-    content: String(row.content_title), date: String(row.upload_date || row.visit_date || ""),
+    content: String(row.content_title), contentLink: row.content_link ? String(row.content_link) : null, date: String(row.upload_date || row.visit_date || ""),
     time: String(row.scheduled_time || "00:00"), rate: Number(row.rate), spent: Number(row.spent),
     status: String(row.status), paymentStatus: String(row.payment_status), notes: row.notes ? String(row.notes) : undefined,
   };
@@ -52,7 +52,7 @@ export async function persistCampaignInfluencerBooking(client: SupabaseClient, c
     themeId: row.campaign_influencer_theme_id ? String(row.campaign_influencer_theme_id) : null,
     themeName: row.theme_name ? String(row.theme_name) : undefined,
     visitDate: row.visit_date ? String(row.visit_date) : null, uploadDate: row.upload_date ? String(row.upload_date) : null,
-    content: String(row.content_title), date: String(row.upload_date || row.visit_date || ""),
+    content: String(row.content_title), contentLink: row.content_link ? String(row.content_link) : null, date: String(row.upload_date || row.visit_date || ""),
     time: String(row.scheduled_time || "00:00"), rate: Number(row.rate), spent: Number(row.spent),
     status: String(row.status), paymentStatus: String(row.payment_status), notes: row.notes ? String(row.notes) : undefined,
   };

@@ -37,9 +37,10 @@ test("Campaign influencer DB: members persist operations, retain finances and le
         values('${legacy}','${workspace}','${influencer}','Nadia','instagram','Brief lama','2026-10-12T19:00:00+07:00',8500000,4250000,'DP dibayar','Draft','${id(1)}');
     `);
     for (const migration of ["20261030081856_campaign_influencer_team_editing.sql", "20261031110000_campaign_influencer_booking_actions.sql"]) await db.exec(await readFile(new URL(`../supabase/migrations/${migration}`, import.meta.url), "utf8"));
+    await db.exec(await readFile(new URL("../supabase/migrations/20261103090000_influencer_content_link.sql", import.meta.url), "utf8"));
     const login = async (n: number) => { await db.exec("reset role"); await db.query("select set_config('request.jwt.claim.sub',$1,false)", [id(n)]); await db.exec("set role authenticated"); };
     const theme = async (campaignId: string, name: string, themeId: string | null = null) => (await db.query<{ saved: { id: string; code: string; name: string; updated_by: string } }>("select public.save_campaign_influencer_theme($1,$2,$3::jsonb) as saved", [campaignId, themeId, JSON.stringify({ name, phase: "Awareness", objective: "Kunjungan", requiredContent: "Menu", cta: "Datang" })])).rows[0].saved;
-    type Booking = { id: string; rate: number; spent: number; payment_status: string; status: string; visit_date: string | null; upload_date: string | null; content_title: string; created_by: string; campaign_id: string; scheduled_time: string; notes: string | null };
+    type Booking = { id: string; rate: number; spent: number; payment_status: string; status: string; visit_date: string | null; upload_date: string | null; content_title: string; content_link: string | null; created_by: string; campaign_id: string; scheduled_time: string; notes: string | null };
     const booking = async (campaignId: string, patch: object, bookingId: string | null = null) => (await db.query<{ saved: Booking }>("select public.save_campaign_influencer_booking($1,$2,$3::jsonb) as saved", [campaignId, bookingId, JSON.stringify(patch)])).rows[0].saved;
     const deleteBooking = async (campaignId: string, bookingId: string) => db.query("select public.delete_campaign_influencer_booking($1,$2)", [campaignId, bookingId]);
     await login(2);
@@ -50,6 +51,11 @@ test("Campaign influencer DB: members persist operations, retain finances and le
     const created = await booking(campaign, { influencerId: influencer, themeId: first.id, visitDate: "2026-10-10", uploadDate: "2026-10-12" });
     assert.equal(Number(created.rate), 8500000); assert.equal(Number(created.spent), 0); assert.equal(created.created_by, id(2));
     assert.equal(created.upload_date, "2026-10-12"); assert.equal(created.scheduled_time, "00:00");
+    const completed = await booking(campaign, { status: "Selesai", contentLink: "https://instagram.com/p/demo" }, created.id);
+    assert.equal(completed.content_link, "https://instagram.com/p/demo");
+    await assert.rejects(booking(campaign, { contentLink: "bukan-url" }, created.id), /valid|http/);
+    const reopened = await booking(campaign, { status: "Revisi" }, created.id);
+    assert.equal(reopened.content_link, null);
     const linked = await booking(campaign, {}, legacy);
     assert.equal(linked.id, legacy); assert.equal(Number(linked.spent), 4250000); assert.equal(linked.payment_status, "DP dibayar"); assert.equal(linked.status, "Draft"); assert.equal(linked.created_by, id(1)); assert.equal(linked.scheduled_time, "19:00");
     const edited = await booking(campaign, { themeId: first.id, visitDate: "2026-10-11", uploadDate: "2026-10-15", notes: "Catatan jadwal diperbarui" }, legacy);

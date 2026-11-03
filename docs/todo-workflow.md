@@ -13,7 +13,7 @@ To-Do and Campaign use the same task IDs and records. The board shows tasks from
 
 ## UI and persistence
 
-- Filters: Brand, PIC (Semua/Hanya saya), Campaign (including Tanpa campaign). The PIC filter never lists individual teammates.
+- Filters: Brand, PIC, Campaign (including Tanpa campaign). Super Admin can select individual users by profile ID, including every PIC on multi-assignee tasks. Members and Viewers only see Semua/Hanya saya.
 - Cards show brand, connected campaign, deadline and assignee avatars. PIC selection is in the manager-only form. The three-dot menu opens Edit tugas.
 - Priority is a boolean; only priority tasks display a filled star. Existing `Tinggi` becomes true; `Sedang` and `Rendah` become false. The legacy text column remains for compatibility.
 - A shared TaskDialog handles creation/editing from To-Do and Campaign. Campaign choices follow the selected brand. Changes keep the same record and clear old phase assignments when moving campaigns.

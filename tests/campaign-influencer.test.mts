@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { canEditCampaignInfluencers, campaignInfluencerThemesForCampaign, displayInfluencerBookingStatus, influencerBookingStatuses, isInfluencerBookingStatus, nextCampaignInfluencerThemeCode, validateInfluencerScheduleDates } from "../lib/campaign-influencer.ts";
+import { canEditCampaignInfluencers, campaignInfluencerThemesForCampaign, displayInfluencerBookingStatus, influencerBookingStatuses, isInfluencerBookingStatus, nextCampaignInfluencerThemeCode, validateInfluencerContentLink, validateInfluencerScheduleDates } from "../lib/campaign-influencer.ts";
 import type { UserIdentity } from "../lib/types.ts";
 
 test("team members edit influencer operations only on active Campaigns; Viewer and unknown roles stay read-only", () => {
@@ -40,4 +40,12 @@ test("status kerja sama memiliki daftar yang disepakati dan Draft lama ditampilk
   for (const status of influencerBookingStatuses) assert.equal(isInfluencerBookingStatus(status), true);
   assert.equal(isInfluencerBookingStatus("Done"), false);
   assert.equal(isInfluencerBookingStatus("Draf"), false);
+});
+
+test("link konten hanya menerima URL http/https", () => {
+  assert.equal(validateInfluencerContentLink(""), null);
+  assert.equal(validateInfluencerContentLink("https://instagram.com/p/demo"), null);
+  assert.equal(validateInfluencerContentLink("http://tiktok.com/@brand/video/1"), null);
+  assert.match(validateInfluencerContentLink("instagram.com/p/demo") || "", /valid/);
+  assert.match(validateInfluencerContentLink("javascript:alert(1)") || "", /http/);
 });

@@ -3,10 +3,10 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import type { AppData, Campaign, CampaignInfluencerBookingPatch, CampaignInfluencerTheme, EntityId, InfluencerBookingStatus, InfluencerPaymentStatus, InfluencerSchedule } from "@/lib/types";
 import { formatDisplayDate } from "@/lib/date-format";
-import { calculateInfluencerPaidAmount, displayInfluencerBookingStatus, displayInfluencerPaymentStatus, influencerBookingStatusTone, influencerBookingStatuses, influencerPaymentStatuses, influencerPaymentStatusTone, validateInfluencerScheduleDates } from "@/lib/campaign-influencer";
+import { calculateInfluencerPaidAmount, displayInfluencerBookingStatus, displayInfluencerPaymentStatus, influencerBookingStatusTone, influencerBookingStatuses, influencerPaymentStatuses, influencerPaymentStatusTone, validateInfluencerContentLink, validateInfluencerScheduleDates } from "@/lib/campaign-influencer";
 import { Avatar, Icon, rupiah, StatusPill } from "@/components/ui";
 
-type BookingEditDraft = { themeId: string; visitDate: string; uploadDate: string; notes: string };
+type BookingEditDraft = { themeId: string; visitDate: string; uploadDate: string; notes: string; contentLink: string };
 
 export function CampaignInfluencerTab({ campaign, themes, schedules, influencers, canEdit, canManagePayments, canDeleteThemes, onDeleteTheme, onDeleteBooking, onPaymentChange, onAddTheme, onEditTheme, onAddBooking, onBookingChange }: {
   campaign: Campaign; themes: CampaignInfluencerTheme[]; schedules: AppData["influencerSchedules"]; influencers: AppData["influencers"]; canEdit: boolean; canManagePayments: boolean; canDeleteThemes: boolean;
@@ -153,7 +153,7 @@ export function CampaignInfluencerTab({ campaign, themes, schedules, influencers
     setBookingActionError("");
     setBookingEditError("");
     setEditingBooking(item);
-    setBookingDraft({ themeId: String(item.themeId ?? ""), visitDate: item.visitDate || "", uploadDate: item.uploadDate === undefined ? item.date || "" : item.uploadDate || "", notes: item.notes || "" });
+    setBookingDraft({ themeId: String(item.themeId ?? ""), visitDate: item.visitDate || "", uploadDate: item.uploadDate === undefined ? item.date || "" : item.uploadDate || "", notes: item.notes || "", contentLink: item.contentLink || "" });
   };
 
   const saveBookingEdit = async (event: FormEvent<HTMLFormElement>) => {
@@ -162,11 +162,17 @@ export function CampaignInfluencerTab({ campaign, themes, schedules, influencers
     setBookingEditError("");
     const dateError = validateInfluencerScheduleDates(bookingDraft.visitDate, bookingDraft.uploadDate);
     if (dateError) { setBookingEditError(dateError); return; }
+    const contentLink = displayInfluencerBookingStatus(editingBooking.status) === "Selesai" ? bookingDraft.contentLink.trim() || null : undefined;
+    if (contentLink !== undefined) {
+      const linkError = validateInfluencerContentLink(contentLink || "");
+      if (linkError) { setBookingEditError(linkError); return; }
+    }
     const saved = await updateBooking(editingBooking.id, {
       themeId: bookingDraft.themeId || null,
       visitDate: bookingDraft.visitDate || null,
       uploadDate: bookingDraft.uploadDate || null,
       notes: bookingDraft.notes,
+      ...(contentLink !== undefined ? { contentLink } : {}),
     }, setBookingEditError);
     if (saved) closeBookingEditor();
   };
@@ -212,7 +218,7 @@ export function CampaignInfluencerTab({ campaign, themes, schedules, influencers
       {bookingActionError && <div className="campaign-form-error" role="alert">{bookingActionError}</div>}
       {pendingRows.length > 0 && <p className="campaign-muted-copy" role="status">Menyimpan jadwal…</p>}
       {!themes.length && schedules.length === 0 ? <div className="campaign-influencer-empty compact"><strong>Tema diperlukan sebelum membuat jadwal</strong><span>Tambahkan tema konten di bagian atas.</span></div> : schedules.length ? <div className="table-wrap">
-        <table className="data-table campaign-influencer-table"><thead><tr><th>Influencer</th><th>Tema konten</th><th>Tgl visit</th><th>Tgl upload</th><th>Rate / spent</th><th>Status kerja sama</th><th>Status pembayaran</th>{canEdit && <th>Aksi</th>}</tr></thead>
+        <table className="data-table campaign-influencer-table"><thead><tr><th>Influencer</th><th>Tema konten</th><th>Tgl visit</th><th>Tgl upload</th><th>Rate / spent</th><th>Status kerja sama</th><th>Status pembayaran</th>{schedules.some((item) => displayInfluencerBookingStatus(item.status) === "Selesai") && <th>Link konten</th>}{canEdit && <th>Aksi</th>}</tr></thead>
           <tbody>{schedules.map((item) => {
             const pending = pendingRows.includes(String(item.id)) || pendingDeleteBookingId === String(item.id);
             const uploadDate = item.uploadDate === undefined ? item.date || "" : item.uploadDate || "";
@@ -233,6 +239,7 @@ export function CampaignInfluencerTab({ campaign, themes, schedules, influencers
                 {!validPaymentStatus && <option value={item.paymentStatus} disabled>{item.paymentStatus}</option>}
                 {influencerPaymentStatuses.map((status) => <option value={status} key={status}>{status}</option>)}
               </select> : <StatusPill status={normalizedPayment} className={`campaign-influencer-status-pill payment-${influencerPaymentStatusTone(item.paymentStatus)}`} />}</td>
+              {schedules.some((schedule) => displayInfluencerBookingStatus(schedule.status) === "Selesai") && <td>{normalizedStatus === "Selesai" ? item.contentLink ? <a className="campaign-content-link" href={item.contentLink} target="_blank" rel="noreferrer">Buka konten <Icon name="external" size={11} /></a> : <span className="campaign-influencer-empty-value">Belum ditambahkan</span> : <span className="campaign-influencer-empty-value">—</span>}</td>}
               {canEdit && <td><div className="campaign-theme-actions campaign-booking-actions"><button type="button" className="button button-soft button-sm" disabled={pending} onClick={() => openBookingEditor(item)}><Icon name="edit" size={13} />Edit</button><button type="button" className="icon-button campaign-theme-edit danger" disabled={pending} onClick={() => void deleteBooking(item)} aria-label={`Hapus jadwal ${item.influencer}`} title={pendingDeleteBookingId === String(item.id) ? "Menghapus jadwal…" : "Hapus jadwal"}><Icon name="trash" size={14} /></button></div></td>}
             </tr>;
           })}</tbody>
@@ -246,6 +253,7 @@ export function CampaignInfluencerTab({ campaign, themes, schedules, influencers
           <label>Tema konten<select className="input" disabled={pendingRows.includes(String(editingBooking.id))} value={bookingDraft.themeId} onChange={(event) => setBookingDraft({ ...bookingDraft, themeId: event.target.value })}><option value="">Tidak ada tema</option>{themes.map((theme) => <option value={String(theme.id)} key={String(theme.id)}>{theme.code} · {theme.name}</option>)}</select></label>
           <label>Tanggal visit<input className="input" type="date" disabled={pendingRows.includes(String(editingBooking.id))} value={bookingDraft.visitDate} onChange={(event) => setBookingDraft({ ...bookingDraft, visitDate: event.target.value })} /></label>
           <label>Tanggal upload<input className="input" type="date" min={bookingDraft.visitDate || undefined} disabled={pendingRows.includes(String(editingBooking.id))} value={bookingDraft.uploadDate} onChange={(event) => setBookingDraft({ ...bookingDraft, uploadDate: event.target.value })} /></label>
+           {displayInfluencerBookingStatus(editingBooking.status) === "Selesai" && <label className="wide">Link konten<input className="input" type="url" inputMode="url" value={bookingDraft.contentLink} disabled={pendingRows.includes(String(editingBooking.id))} onChange={(event) => setBookingDraft({ ...bookingDraft, contentLink: event.target.value })} placeholder="https://instagram.com/..." aria-describedby="campaign-content-link-help" /><small id="campaign-content-link-help" className="campaign-booking-field-help">Tambahkan URL konten yang sudah dipublikasikan.</small></label>}
           <label className="wide">Catatan<textarea className="input" rows={3} disabled={pendingRows.includes(String(editingBooking.id))} value={bookingDraft.notes} onChange={(event) => setBookingDraft({ ...bookingDraft, notes: event.target.value })} placeholder="Catatan untuk jadwal ini" /></label>
         </div>
         {bookingEditError && <div className="campaign-form-error" role="alert">{bookingEditError}</div>}

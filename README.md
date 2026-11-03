@@ -9,7 +9,7 @@ Ngapaya adalah dashboard manajemen tim marketing dan analitik sosial media untuk
 - Recharts untuk visualisasi analytics.
 - dnd-kit tersedia sebagai fondasi interaksi Kanban lanjutan.
 - Supabase Auth/PostgreSQL/Realtime/RLS sebagai backend produksi.
-- Repository demo berbasis localStorage sebagai fallback ketika Supabase belum dikonfigurasi.
+- Mode demo berbasis localStorage hanya untuk development tanpa konfigurasi Supabase.
 
 ## Modul
 
@@ -34,29 +34,24 @@ Pemeriksaan produksi:
 
 ```bash
 npm run typecheck
+npm test
 npm run build
 npm audit --omit=dev
 ```
 
 ## Mode data
 
-Tanpa environment variable, aplikasi berjalan dalam **mode demo lokal**. Data perubahan tersimpan di browser dan bisa di-reset melalui modal input data sosial.
+Pada development tanpa environment Supabase, aplikasi menyediakan **mode demo lokal**. Production tidak mengaktifkan demo dan akan menampilkan konfigurasi belum siap jika environment tidak lengkap.
 
 Akun demo lokal memiliki akses penuh ke seluruh modul: username `demo.superadmin` dan PIN `123456`. Kredensial ini hanya identitas demo di browser; tidak dipakai untuk membuat akun Supabase atau mengakses provider sosial.
 
-Untuk mode produksi, salin `.env.example` menjadi `.env.local`, isi kredensial Supabase, kemudian jalankan migrasi:
+Untuk mode live, salin `.env.example` menjadi `.env.local`, isi URL serta key dari project Supabase yang sama, lalu terapkan **seluruh migrasi** dalam `supabase/migrations` sesuai urutan nama setelah review dan persetujuan production. Jangan menjalankan hanya lima migrasi awal: Campaign/To-Do terbaru memerlukan schema lanjutan.
 
-```text
-supabase/migrations/001_initial_schema.sql
-supabase/migrations/002_influencer_bookings.sql
-supabase/migrations/003_username_pin_auth.sql
-supabase/migrations/004_social_hub.sql
-supabase/migrations/005_social_media_storage.sql
-```
+Jalankan `npm run supabase:check` untuk memeriksa Auth API, schema dan akun awal tanpa menampilkan key. Panduan lengkap cookie/session SSR, endpoint `/api/auth/session`, target database dan provisioning tersedia di [integrasi Supabase](docs/supabase-integration.md).
 
 Skema menyediakan profiles, workspaces, membership/roles, campaigns, tasks, social accounts, metric snapshots, dan social posts. Row Level Security aktif pada seluruh tabel utama.
 
-Di production, buka halaman **Buat akun** untuk mendaftarkan pengguna pertama dengan username, PIN, email profil, dan nomor WhatsApp. Login pertama akan otomatis membuat workspace HBI, profil pemilik, serta data campaign/task awal. Perubahan campaign, task, dan jadwal influencer berikutnya tersinkron ke Supabase; modul lain masih memakai data demo sampai tabelnya diaktifkan pada fase berikutnya. Endpoint pendaftaran dan reset PIN membutuhkan `SUPABASE_SECRET_KEY` (atau `SUPABASE_SERVICE_ROLE_KEY`) di environment server.
+Production menggunakan profil dan membership yang sudah terdaftar. Bootstrap tidak membuat data contoh atau workspace secara otomatis; pendaftaran mandiri dinonaktifkan. Super Admin membuat anggota melalui Manajemen User. Ikuti [persiapan production](docs/production-readiness.md) untuk migrasi penyimpanan Campaign, konfigurasi sesi dan pemeriksaan sebelum rilis.
 
 ### Login username & PIN
 

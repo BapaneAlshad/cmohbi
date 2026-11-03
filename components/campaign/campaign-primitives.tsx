@@ -52,7 +52,7 @@ export function BudgetProgress({ budget, spent, compact = false }: { budget: num
 export type CampaignPromo = { id: string; title: string; period: string; startDate?: string; endDate?: string; summary?: string; detail: string; status: string };
 
 export function PromoCard({ promo }: { promo: CampaignPromo }) {
-  return <article className="campaign-promo-card"><div className="campaign-card-row"><StatusPill status={promo.status} /><span>{promo.startDate || promo.endDate ? formatCampaignPeriod(promo.startDate, promo.endDate) : formatDisplayDateRange(promo.period)}</span></div><h3>{promo.title}</h3>{promo.summary && <p>{promo.summary}</p>}<div className="campaign-promo-detail">{promo.detail}</div><PresentationBadge /></article>;
+  return <article className="campaign-promo-card"><div className="campaign-card-row"><StatusPill status={promo.status} /><span>{promo.startDate || promo.endDate ? formatCampaignPeriod(promo.startDate, promo.endDate) : formatDisplayDateRange(promo.period)}</span></div><h3>{promo.title}</h3>{promo.summary && <p>{promo.summary}</p>}<div className="campaign-promo-detail">{promo.detail}</div></article>;
 }
 
 export type CampaignPhase = CampaignTimelinePhase;

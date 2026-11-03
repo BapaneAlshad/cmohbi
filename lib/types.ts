@@ -8,6 +8,10 @@ export type CampaignLifecycle = "active" | "archived" | "trashed";
 
 export type CampaignTimelinePhase = { id: string; name: string; period: string; purpose: string; status?: string; startDate?: string | null; endDate?: string | null; color?: string | null };
 export type CampaignTimelineConfig = { phaseMode: boolean; phases: CampaignTimelinePhase[]; taskPhase: Record<string, string> };
+export interface CampaignContentConfig { tagline: string; bigMessage: string; intro: string; instructions: string; steps: string[]; promos: Array<{ id: string; title: string; period: string; detail: string; status: string; startDate?: string; endDate?: string }> }
+export interface Campaign { rowVersion?: number; contentConfig?: CampaignContentConfig }
+export type CampaignSavePatch = Partial<Pick<Campaign, "name" | "brandId" | "objective" | "startDate" | "endDate" | "avatarUrl" | "contentConfig">> & { memberIds?: EntityId[] };
+export type SaveCampaign = (id: EntityId, patch: CampaignSavePatch, expectedVersion: number) => Promise<void>;
 
 export interface Campaign { id: EntityId; name: string; brand: string; brandId?: EntityId | null; avatarUrl?: string | null; timelineConfig?: CampaignTimelineConfig | null; objective: string; startDate?: string | null; endDate?: string | null; period: string; status: string; progress: number; budget: number; spent: number; kpi: string; tasks: number; content: number; lifecycleStatus: CampaignLifecycle; archivedAt?: string | null; archivedBy?: string | null; deletedAt?: string | null; deletedBy?: string | null; previousLifecycleStatus?: Exclude<CampaignLifecycle, "trashed"> | null }
 export interface CampaignMember { campaignId: EntityId; userId: EntityId }
@@ -20,11 +24,11 @@ export interface ContentItem { id: number | string; title: string; date: number;
 export interface RequestItem { id: EntityId; title: string; sender: string; date: string; brand: string; priority: string; status: string; pic?: string; icon: string }
 export interface Influencer { id?: EntityId; name: string; platform: "Instagram" | "Facebook" | "TikTok"; niche: string; rate: number; followers: string; engagement: string; status: string }
 export interface CampaignInfluencerTheme { id: EntityId; campaignId: EntityId; code: string; name: string; phase: string; objective: string; requiredContent: string; cta: string }
-export interface InfluencerSchedule { id: EntityId; influencer: string; influencerId?: EntityId | null; platform: "Instagram" | "Facebook" | "TikTok"; campaign: string; campaignId?: EntityId | null; themeId?: EntityId | null; themeName?: string; visitDate?: string | null; uploadDate?: string | null; content: string; date: string; time: string; status: string; rate: number; spent: number; paymentStatus: string; notes?: string }
+export interface InfluencerSchedule { id: EntityId; influencer: string; influencerId?: EntityId | null; platform: "Instagram" | "Facebook" | "TikTok"; campaign: string; campaignId?: EntityId | null; themeId?: EntityId | null; themeName?: string; visitDate?: string | null; uploadDate?: string | null; content: string; contentLink?: string | null; date: string; time: string; status: string; rate: number; spent: number; paymentStatus: string; notes?: string }
 export type InfluencerBookingStatus = "Menunggu konfirmasi" | "Terjadwal" | "Sudah visit" | "Revisi" | "Selesai" | "Dibatalkan";
 export type InfluencerPaymentStatus = "Belum dibayar" | "DP dibayar" | "Lunas";
 export type CampaignInfluencerThemeInput = Pick<CampaignInfluencerTheme, "name" | "phase" | "objective" | "requiredContent" | "cta">;
-export type CampaignInfluencerBookingPatch = { influencerId?: EntityId | null; themeId?: EntityId | null; visitDate?: string | null; uploadDate?: string | null; notes?: string; status?: InfluencerBookingStatus };
+export type CampaignInfluencerBookingPatch = { influencerId?: EntityId | null; themeId?: EntityId | null; visitDate?: string | null; uploadDate?: string | null; notes?: string; status?: InfluencerBookingStatus; contentLink?: string | null };
 export interface CampaignInfluencerActions {
   saveInfluencerTheme: (campaignId: EntityId, input: CampaignInfluencerThemeInput, id?: EntityId) => Promise<CampaignInfluencerTheme>;
   deleteInfluencerTheme: (campaignId: EntityId, id: EntityId) => Promise<void>;
