@@ -6,5 +6,5 @@ export function demoLoginAllowed(environment = process.env.NODE_ENV) {
 }
 
 export function emptyWorkspaceData(): AppData {
-  return { campaigns: [], brands: [], tasks: [], content: [], requests: [], influencers: [], influencerSchedules: [], influencerThemes: [], transactions: [], users: [], socialAccounts: [], socialSnapshots: [], socialPosts: [], socialInbox: [], campaignMembers: [], campaignNotes: [], adminDashboardNotes: [], notifications: [], campaignKpis: [], taskStatusHistory: [], influencerStatusHistory: [] };
+  return { campaigns: [], brands: [], tasks: [], content: [], requests: [], influencers: [], influencerSchedules: [], influencerThemes: [], transactions: [], users: [], socialAccounts: [], socialSnapshots: [], socialPosts: [], socialInbox: [], campaignExpenses: [], campaignMembers: [], campaignNotes: [], adminDashboardNotes: [], notifications: [], campaignKpis: [], taskStatusHistory: [], influencerStatusHistory: [] };
 }

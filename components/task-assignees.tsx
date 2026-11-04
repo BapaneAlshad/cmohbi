@@ -2,7 +2,7 @@
 
 import type { EntityId, Task, User } from "@/lib/types";
 import { Avatar } from "@/components/ui";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 export function taskAssigneeIds(task: Pick<Task, "assigneeIds" | "pic">, users: User[]) {
   if (task.assigneeIds !== undefined) return task.assigneeIds;
@@ -39,19 +39,23 @@ export function TaskAssigneePicker({ users, selectedIds, legacyPic, disabled = f
     if (legacy) initial.add(String(legacy.id ?? legacy.username));
   }
   const [selected, setSelected] = useState(initial);
+  const pickerRef = useRef<HTMLDetailsElement>(null);
   const selectionKey = Array.from(initial).sort().join("|");
   useEffect(() => { setSelected(new Set(selectionKey ? selectionKey.split("|") : [])); }, [selectionKey]);
   const selectedUsers = users.filter((user) => selected.has(String(user.id ?? user.username)));
   const summary = selectedUsers.length ? selectedUsers.map((user) => user.name).join(", ") : "Pilih anggota";
-  return <details className={`task-assignee-picker ${disabled ? "disabled" : ""}`}>
+  return <details ref={pickerRef} className={`task-assignee-picker ${disabled ? "disabled" : ""}`}>
     <summary aria-label="Pilih beberapa PIC" aria-disabled={disabled} onClick={(event) => { if (disabled) event.preventDefault(); }}>
       <span className="task-assignee-picker-label">{summary}</span><span aria-hidden="true">⌄</span>
     </summary>
     {!disabled && <div className="task-assignee-options" role="group" aria-label="Anggota yang ditugaskan">
-      {users.length ? users.map((user) => {
-        const id = String(user.id ?? user.username);
-        return <label key={id}><input type="checkbox" name={name} value={id} aria-label={`Tugaskan ${user.name}`} checked={selected.has(id)} onChange={(event) => { const next = new Set(selected); if (event.currentTarget.checked) next.add(id); else next.delete(id); const previous = selected; setSelected(next); Promise.resolve(onSelectionChange?.([...next])).catch(() => setSelected(previous)); }} /><span className="task-assignee-option-avatar"><Avatar name={user.name} src={user.avatarUrl} /></span><span>{user.name}</span></label>;
-      }) : <span className="task-assignee-no-options">Belum ada anggota workspace.</span>}
+      <div className="task-assignee-options-list">
+        {users.length ? users.map((user) => {
+          const id = String(user.id ?? user.username);
+          return <label key={id}><input type="checkbox" name={name} value={id} aria-label={`Tugaskan ${user.name}`} checked={selected.has(id)} onChange={(event) => { const next = new Set(selected); if (event.currentTarget.checked) next.add(id); else next.delete(id); const previous = selected; setSelected(next); Promise.resolve(onSelectionChange?.([...next])).catch(() => setSelected(previous)); }} /><span className="task-assignee-option-avatar"><Avatar name={user.name} src={user.avatarUrl} /></span><span>{user.name}</span></label>;
+        }) : <span className="task-assignee-no-options">Belum ada anggota workspace.</span>}
+      </div>
+      <div className="task-assignee-picker-actions"><button type="button" className="button button-primary button-sm" onClick={() => { if (pickerRef.current) pickerRef.current.open = false; }}>OK</button></div>
     </div>}
   </details>;
 }

@@ -47,6 +47,7 @@ test("active campaigns include explicit members and legacy task participants onl
 
 test("dashboard notes combine pinned campaign notes for included campaigns and assigned active admin notes", () => {
   const source = data({
+    campaigns: [{ ...data().campaigns[0], contentConfig: { tagline: "", bigMessage: "", intro: "", instructions: "Instruksi yang disinkronkan", instructionsPinned: true, instructionsPinnedAt: "2026-10-01T11:00:00Z", steps: [], promos: [] } }],
     campaignMembers: [{ campaignId: "c-1", userId: "u-1" }],
     campaignNotes: [
       { id: "pinned", campaignId: "c-1", authorName: "Ayu", body: "Brief final", createdAt: "2026-10-01T10:00:00Z", pinnedToDashboard: true },
@@ -60,8 +61,12 @@ test("dashboard notes combine pinned campaign notes for included campaigns and a
     ],
   });
   const result = memberDashboardNotes(source, member, "2026-10-01");
-  assert.deepEqual(result.campaign.map((note) => note.id), ["pinned"]);
+  assert.deepEqual(result.campaign.map((note) => note.id), ["brief:c-1", "pinned"]);
+  assert.equal(result.campaign[0].source, "brief");
+  assert.equal(result.campaign[0].body, "Instruksi yang disinkronkan");
   assert.deepEqual(result.admin.map((note) => note.id), ["mine"]);
+  const blankPinned = memberDashboardNotes(data({ campaigns: [{ ...source.campaigns[0], contentConfig: { ...source.campaigns[0].contentConfig!, instructions: "   " } }], campaignMembers: source.campaignMembers, campaignNotes: source.campaignNotes }), member, "2026-10-01");
+  assert.deepEqual(blankPinned.campaign.map((note) => note.id), ["pinned"]);
 });
 
 test("owner and admin retain the management dashboard, while member and viewer use their personal dashboard", () => {

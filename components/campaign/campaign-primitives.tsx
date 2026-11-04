@@ -18,8 +18,8 @@ export function IntegrationNotice({ children, tone = "blue" }: { children: React
   return <div className={`campaign-integration-notice ${tone}`}><Icon name={tone === "amber" ? "alert" : "info"} size={15} /><div>{children}</div></div>;
 }
 
-export function EmptyCampaignState({ icon = "sparkles", title, description, action }: { icon?: string; title: string; description: string; action?: ReactNode }) {
-  return <div className="campaign-empty-state"><span className="campaign-empty-icon"><Icon name={icon} size={18} /></span><strong>{title}</strong><p>{description}</p>{action}</div>;
+export function EmptyCampaignState({ icon = "sparkles", title, description, action }: { icon?: string; title: string; description?: string; action?: ReactNode }) {
+  return <div className="campaign-empty-state"><span className="campaign-empty-icon"><Icon name={icon} size={18} /></span><strong>{title}</strong>{description && <p>{description}</p>}{action}</div>;
 }
 
 export function CampaignAvatar({ src, fallbackSrc, initials }: { src?: string | null; fallbackSrc?: string | null; initials: string }) {
@@ -51,8 +51,8 @@ export function BudgetProgress({ budget, spent, compact = false }: { budget: num
 
 export type CampaignPromo = { id: string; title: string; period: string; startDate?: string; endDate?: string; summary?: string; detail: string; status: string };
 
-export function PromoCard({ promo }: { promo: CampaignPromo }) {
-  return <article className="campaign-promo-card"><div className="campaign-card-row"><StatusPill status={promo.status} /><span>{promo.startDate || promo.endDate ? formatCampaignPeriod(promo.startDate, promo.endDate) : formatDisplayDateRange(promo.period)}</span></div><h3>{promo.title}</h3>{promo.summary && <p>{promo.summary}</p>}<div className="campaign-promo-detail">{promo.detail}</div></article>;
+export function PromoCard({ promo, canEdit = false, onEdit, onDelete }: { promo: CampaignPromo; canEdit?: boolean; onEdit?: () => void; onDelete?: () => void }) {
+  return <article className="campaign-promo-card"><div className="campaign-card-row"><StatusPill status={promo.status} /><span>{promo.startDate || promo.endDate ? formatCampaignPeriod(promo.startDate, promo.endDate) : formatDisplayDateRange(promo.period)}</span>{canEdit && <div className="campaign-promo-actions"><button type="button" className="icon-button" onClick={onEdit} aria-label={`Edit promo ${promo.title}`} title="Edit promo"><Icon name="edit" size={13} /></button><button type="button" className="icon-button danger" onClick={onDelete} aria-label={`Hapus promo ${promo.title}`} title="Hapus promo"><Icon name="trash" size={13} /></button></div>}</div><h3>{promo.title}</h3>{promo.summary && <p>{promo.summary}</p>}<div className="campaign-promo-detail">{promo.detail}</div></article>;
 }
 
 export type CampaignPhase = CampaignTimelinePhase;
@@ -81,10 +81,10 @@ export function CampaignTaskRow({ task, campaign, users = [], identity, onToggle
 
 export type CreativeReference = { id: string; title: string; url: string; kind: string; startDate?: string; endDate?: string; mimeType?: string; source?: "backend" | "presentation" };
 
-export function CreativeReferenceCard({ reference }: { reference: CreativeReference }) {
+export function CreativeReferenceCard({ reference, onDelete }: { reference: CreativeReference; onDelete?: () => void }) {
   const [imageFailed, setImageFailed] = useState(false);
   const isImage = reference.kind === "Gambar" || reference.mimeType?.startsWith("image/");
-  return <a className="campaign-reference-card" href={reference.url} target="_blank" rel="noreferrer"><span className="campaign-reference-preview">{isImage && !imageFailed ? <img src={reference.url} alt={reference.title} loading="lazy" onError={() => setImageFailed(true)} /> : <Icon name={isImage ? "image" : "link"} size={24} />}</span><strong>{reference.title}</strong><small>{reference.kind} · {reference.startDate && reference.endDate ? `${formatCampaignPeriod(reference.startDate, reference.endDate)} · ` : ""}Buka referensi <Icon name="external" size={10} /></small>{reference.source !== "backend" && <PresentationBadge />}</a>;
+  return <article className="campaign-reference-card"><a className="campaign-reference-link" href={reference.url} target="_blank" rel="noreferrer"><span className="campaign-reference-preview">{isImage && !imageFailed ? <img src={reference.url} alt={reference.title} loading="lazy" onError={() => setImageFailed(true)} /> : <Icon name={isImage ? "image" : "link"} size={24} />}</span><strong>{reference.title}</strong><small>{reference.kind} · {reference.startDate && reference.endDate ? `${formatCampaignPeriod(reference.startDate, reference.endDate)} · ` : ""}Buka referensi <Icon name="external" size={10} /></small>{reference.source !== "backend" && <PresentationBadge />}</a>{onDelete && <button type="button" className="button button-ghost button-sm campaign-reference-delete" onClick={onDelete} aria-label={`Hapus ${reference.title}`}><Icon name="trash" size={12} />Hapus gambar</button>}</article>;
 }
 
 export function InfluencerBriefCard({ item }: { item: AppData["influencerSchedules"][number] }) {

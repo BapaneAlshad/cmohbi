@@ -2,7 +2,7 @@ import { emptyWorkspaceData } from "../production-policy";
 import { emptyCampaignContent } from "../campaign-persistence";
 import { mapPendingRequest } from "./task-board-data";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { AppData, CampaignTimelineConfig, ContentItem, EntityId, TaskStatus } from "@/lib/types";
+import type { AppData, CampaignExpense, CampaignTimelineConfig, ContentItem, EntityId, TaskStatus } from "@/lib/types";
 import { formatCampaignPeriod } from "@/lib/campaign-form";
 import { formatDisplayDate, formatDisplayDateTime } from "@/lib/date-format";
 import { normalizeAccessRole, profileJobTitle } from "@/lib/user-management";
@@ -65,6 +65,12 @@ function isMissingDashboardNotes(error: { code?: string; message?: string } | nu
     || ["campaign_members", "campaign_notes", "admin_dashboard_notes", "admin_dashboard_note_recipients"].some((table) => message.includes(table) && (message.includes("does not exist") || message.includes("schema cache") || message.includes("could not find the table")));
 }
 
+function isMissingCampaignExpensesTable(error: { code?: string; message?: string } | null) {
+  const message = error?.message?.toLowerCase() ?? "";
+  return error?.code === "42P01" || error?.code === "PGRST205"
+    || (message.includes("campaign_expenses") && (message.includes("does not exist") || message.includes("schema cache") || message.includes("could not find the table")));
+}
+
 function isMissingTaskCalendarColumn(error: { code?: string; message?: string } | null) {
   const message = error?.message?.toLowerCase() ?? "";
   return (error?.code === "42703" || error?.code === "PGRST204") && message.includes("content_calendar_type");
@@ -110,7 +116,7 @@ export async function loadWorkspaceData(
   currentUserEmail: string,
 ): Promise<AppData> {
   fallback = emptyWorkspaceData();
-  const [campaignResult, taskResult, memberResult, bookingResult, themeResult, accountResult, metricResult, postResult, inboxResult, requestResult, influencerResult, transactionResult, brandResult, brandMenuResult, notificationResult, campaignMembersResult, campaignNotesResult, adminNotesResult, adminNoteRecipientsResult] = await Promise.all([
+  const [campaignResult, taskResult, memberResult, bookingResult, themeResult, accountResult, metricResult, postResult, inboxResult, requestResult, influencerResult, transactionResult, brandResult, brandMenuResult, notificationResult, campaignMembersResult, campaignNotesResult, adminNotesResult, adminNoteRecipientsResult, campaignExpenseResult] = await Promise.all([
     client.from("campaigns").select("*,campaign_members(user_id)").eq("workspace_id", workspaceId).order("created_at", { ascending: false }),
     client.from("tasks").select("*").eq("workspace_id", workspaceId).order("created_at", { ascending: true }),
     client.from("workspace_members").select("user_id, role").eq("workspace_id", workspaceId),
@@ -130,6 +136,7 @@ export async function loadWorkspaceData(
     client.from("campaign_notes").select("id,campaign_id,author_id,author_name,body,reply_to,pinned_to_dashboard,created_at").eq("workspace_id", workspaceId).order("created_at", { ascending: false }),
     client.from("admin_dashboard_notes").select("id,title,body,created_by,created_by_name,expires_at,is_active,created_at,updated_at").eq("workspace_id", workspaceId).order("created_at", { ascending: false }),
     client.from("admin_dashboard_note_recipients").select("note_id,user_id").eq("workspace_id", workspaceId),
+    client.from("campaign_expenses").select("id,campaign_id,category,title,amount,expense_date,details,created_by,created_at").eq("workspace_id", workspaceId).order("expense_date", { ascending: false }).order("created_at", { ascending: false }),
   ]);
 
   const firstError = campaignResult.error || taskResult.error || memberResult.error;
@@ -150,6 +157,7 @@ export async function loadWorkspaceData(
   for (const result of [campaignMembersResult, campaignNotesResult, adminNotesResult, adminNoteRecipientsResult]) {
     if (result.error && !isMissingDashboardNotes(result.error)) throw result.error;
   }
+  if (campaignExpenseResult.error && !isMissingCampaignExpensesTable(campaignExpenseResult.error)) throw campaignExpenseResult.error;
 
   const profileById = new Map((profileResult.data ?? []).map((profile) => [profile.id, profile]));
   const recipientsByNote = new Map<string, string[]>();
@@ -269,6 +277,17 @@ export async function loadWorkspaceData(
     brand: brandNameById.get(transaction.brand_id) ?? transaction.brand,
     brandId: transaction.brand_id || null,
   }));
+  const campaignExpenses: CampaignExpense[] = campaignExpenseResult.error ? [] : (campaignExpenseResult.data ?? []).map((expense) => ({
+    id: String(expense.id),
+    campaignId: String(expense.campaign_id),
+    category: expense.category as CampaignExpense["category"],
+    title: String(expense.title),
+    amount: Number(expense.amount),
+    date: String(expense.expense_date),
+    details: expense.details ? String(expense.details) : null,
+    createdBy: expense.created_by ? String(expense.created_by) : null,
+    createdAt: expense.created_at ? String(expense.created_at) : undefined,
+  }));
   const brands = brandResult.error || brandMenuResult.error
     ? fallback.brands
     : (brandResult.data ?? []).map((brand) => ({
@@ -299,6 +318,7 @@ export async function loadWorkspaceData(
     requests,
     influencers,
     transactions,
+    campaignExpenses,
     campaignMembers: campaignRows.flatMap((campaign) => (campaign.campaign_members || []).map((member: { user_id: string }) => ({ campaignId: campaign.id, userId: member.user_id }))),
     campaignNotes: campaignNotesResult.error ? [] : (campaignNotesResult.data ?? []).map((item) => ({ id: item.id, campaignId: item.campaign_id, authorId: item.author_id, authorName: item.author_name, body: item.body, replyTo: item.reply_to, pinnedToDashboard: item.pinned_to_dashboard, createdAt: item.created_at })),
     adminDashboardNotes: adminNotesResult.error ? [] : (adminNotesResult.data ?? []).map((item) => ({ id: item.id, title: item.title, body: item.body, createdBy: item.created_by, createdByName: item.created_by_name, recipientIds: recipientsByNote.get(item.id) || [], expiresAt: item.expires_at, isActive: item.is_active, createdAt: item.created_at, updatedAt: item.updated_at })),

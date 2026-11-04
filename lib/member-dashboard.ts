@@ -1,6 +1,7 @@
-import type { AdminDashboardNote, AppData, CampaignDiscussionNote, EntityId, Task, UserIdentity } from "./types.ts";
+import type { AdminDashboardNote, AppData, CampaignImportantNote, EntityId, Task, UserIdentity } from "./types.ts";
 import { isTaskManager, taskIsPriority } from "./task-workflow.ts";
 import { taskDate } from "./campaign-overview.ts";
+import { campaignImportantNotes } from "./campaign-important-notes.ts";
 
 const monthNumber: Record<string, number> = { jan: 1, januari: 1, feb: 2, februari: 2, mar: 3, maret: 3, apr: 4, april: 4, mei: 5, jun: 6, juni: 6, jul: 7, juli: 7, agu: 8, agt: 8, agustus: 8, sep: 9, sept: 9, september: 9, okt: 10, oktober: 10, nov: 11, november: 11, des: 12, desember: 12 };
 
@@ -75,10 +76,10 @@ export function memberCampaigns(data: AppData, identity: UserIdentity | undefine
 }
 
 export function memberDashboardNotes(data: AppData, identity: UserIdentity | undefined, today: string) {
-  if (!identity) return { campaign: [] as CampaignDiscussionNote[], admin: [] as AdminDashboardNote[] };
-  const campaignIds = new Set(memberCampaigns(data, identity).map((campaign) => String(campaign.id)));
+  if (!identity) return { campaign: [] as CampaignImportantNote[], admin: [] as AdminDashboardNote[] };
+  const campaigns = memberCampaigns(data, identity);
   const userId = resolveUserId(data, identity);
-  const campaign = (data.campaignNotes || []).filter((note) => note.pinnedToDashboard && campaignIds.has(String(note.campaignId)))
+  const campaign = campaigns.flatMap((item) => campaignImportantNotes(item, data.campaignNotes || []))
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   const admin = (data.adminDashboardNotes || []).filter((note) => note.isActive
       && note.recipientIds.some((id) => String(id) === String(userId))

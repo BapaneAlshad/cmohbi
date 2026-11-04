@@ -27,6 +27,7 @@ test("Campaign RPC: confirmed create/edit, persistent brief/promos, stale-write 
     `);
     await db.exec(await readFile(new URL("../supabase/migrations/20261030140000_brand_colors_and_phase_dates.sql",import.meta.url),"utf8"));
     await db.exec(await readFile(new URL("../supabase/migrations/20261103043508_campaign_production_persistence.sql",import.meta.url),"utf8"));
+    await db.exec(await readFile(new URL("../supabase/migrations/20261104025823_brief_instructions_dashboard_pin.sql",import.meta.url),"utf8"));
     const login=async(n:number)=>{await db.exec("reset role");await db.query("select set_config('request.jwt.claim.sub',$1,false)",[id(n)]);await db.exec("set role authenticated");};
     const save=async(version:number|null,patch:object,campaignId=campaign,workspace=ws)=>(await db.query<{saved:Record<string,unknown>}>("select public.save_campaign_record($1,$2,$3,$4::jsonb) saved",[workspace,campaignId,version,JSON.stringify(patch)])).rows[0].saved;
     await login(1);
@@ -51,13 +52,27 @@ test("Campaign RPC: confirmed create/edit, persistent brief/promos, stale-write 
     const latest=(await db.query<{row_version:number}>("select row_version from public.campaigns where id=$1",[campaign])).rows[0].row_version;
     const phaseEdit=await save(Number(latest),{phases:[{...phases[0],name:"Updated"}]});
     assert.deepEqual((phaseEdit.timeline_config as {taskPhase:object}).taskPhase,{"task-1":"p1"});
-    for(const who of [2,3,4]) {await login(who);await assert.rejects(save(Number(phaseEdit.row_version),{name:"Denied"}),/Super Admin/);}
+    const pinnedContent={...content,instructionsPinned:true,instructionsPinnedAt:"2026-11-04T01:02:03.000Z"};
+    const pinned=await save(Number(phaseEdit.row_version),{content_config:pinnedContent});
+    assert.equal((pinned.content_config as typeof pinnedContent).instructionsPinned,true);
+    const revisedContent={...pinnedContent,instructions:"Instruksi yang diperbarui"};
+    const revised=await save(Number(pinned.row_version),{content_config:revisedContent});
+    assert.equal((revised.content_config as typeof revisedContent).instructions,"Instruksi yang diperbarui");
+    assert.equal((revised.content_config as typeof revisedContent).instructionsPinnedAt,pinnedContent.instructionsPinnedAt);
+    const unpinnedContent={...revisedContent,instructionsPinned:false,instructionsPinnedAt:null};
+    const unpinned=await save(Number(revised.row_version),{content_config:unpinnedContent});
+    assert.equal((unpinned.content_config as typeof unpinnedContent).instructionsPinned,false);
+    assert.equal((unpinned.content_config as typeof unpinnedContent).instructionsPinnedAt,null);
+    await assert.rejects(save(Number(unpinned.row_version),{content_config:{...unpinnedContent,instructions:"  ",instructionsPinned:true,instructionsPinnedAt:"2026-11-04T01:02:03Z"}}),/Instruksi penting wajib diisi/);
+    await assert.rejects(save(Number(unpinned.row_version),{content_config:{...unpinnedContent,instructionsPinned:"true"}}),/Status pin Instruksi penting/);
+    await assert.rejects(save(Number(unpinned.row_version),{content_config:{...unpinnedContent,instructionsPinned:true,instructionsPinnedAt:"invalid"}}),/Waktu pin Instruksi penting/);
+    for(const who of [2,3,4]) {await login(who);await assert.rejects(save(Number(unpinned.row_version),{content_config:{...unpinnedContent,instructionsPinned:true,instructionsPinnedAt:"2026-11-04T01:02:03Z"}}),/Super Admin/);}
     await login(1);
     await db.query("update public.campaigns set lifecycle_status='archived' where id=$1",[campaign]);
-    await assert.rejects(save(Number(phaseEdit.row_version)+1,{name:"Archive edit"}),/hanya dapat dibaca/);
+    await assert.rejects(save(Number(unpinned.row_version)+1,{name:"Archive edit"}),/hanya dapat dibaca/);
     await assert.rejects(save(null,{name:"Cross workspace",brand_id:secondBrand},id(30),id(20)),/Super Admin/);
     await db.exec("reset role");
     assert.deepEqual((await db.query("select user_id from public.campaign_members where campaign_id=$1",[campaign])).rows,[{user_id:id(2)}]);
-    assert.deepEqual((await db.query<{content_config:object}>("select content_config from public.campaigns where id=$1",[campaign])).rows[0].content_config,content);
+    assert.deepEqual((await db.query<{content_config:object}>("select content_config from public.campaigns where id=$1",[campaign])).rows[0].content_config,unpinnedContent);
   } finally {await db.close();}
 });

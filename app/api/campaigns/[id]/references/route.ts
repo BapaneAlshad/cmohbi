@@ -23,6 +23,21 @@ function validUrl(value: string) {
   }
 }
 
+function campaignReferenceStoragePath(value: string) {
+  try {
+    const url = new URL(value);
+    const marker = "/storage/v1/object/public/campaign-references/";
+    const markerIndex = url.pathname.indexOf(marker);
+    return markerIndex >= 0 ? decodeURIComponent(url.pathname.slice(markerIndex + marker.length)) : null;
+  } catch {
+    return null;
+  }
+}
+
+function isWorkspaceManager(role: unknown) {
+  return role === "owner" || role === "admin";
+}
+
 async function referenceContext(request: NextRequest, id: string) {
   const admin = createSupabaseAdminClient();
   const token = bearerToken(request);
@@ -62,7 +77,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const { id } = await params;
   const context = await referenceContext(request, id);
   if ("response" in context) return context.response;
-  if (context.role === "viewer") return NextResponse.json({ error: "Akun Viewer tidak dapat menambahkan referensi." }, { status: 403 });
+  if (!isWorkspaceManager(context.role)) return NextResponse.json({ error: "Hanya Super Admin yang dapat menambahkan referensi Campaign." }, { status: 403 });
 
   const body = await request.json().catch(() => null) as { title?: string; url?: string; kind?: string; startDate?: string; endDate?: string; mimeType?: string } | null;
   const title = String(body?.title || "").trim();
@@ -90,4 +105,42 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   }).select("id, title, url, kind, start_date, end_date, mime_type, created_at, created_by").single();
   if (result.error) return NextResponse.json({ error: result.error.message }, { status: 500 });
   return NextResponse.json({ reference: result.data }, { status: 201 });
+}
+
+export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const context = await referenceContext(request, id);
+  if ("response" in context) return context.response;
+  if (!isWorkspaceManager(context.role)) return NextResponse.json({ error: "Hanya Super Admin yang dapat menghapus referensi Campaign." }, { status: 403 });
+
+  const referenceId = new URL(request.url).searchParams.get("referenceId")?.trim() || "";
+  if (!isUuid(referenceId)) return NextResponse.json({ error: "ID referensi tidak valid." }, { status: 400 });
+
+  const referenceResult = await context.admin.from("campaign_references")
+    .select("id, url, kind")
+    .eq("id", referenceId)
+    .eq("campaign_id", id)
+    .eq("workspace_id", context.campaign.workspace_id)
+    .maybeSingle();
+  if (referenceResult.error) return NextResponse.json({ error: referenceResult.error.message }, { status: 500 });
+  if (!referenceResult.data) return NextResponse.json({ error: "Referensi tidak ditemukan." }, { status: 404 });
+
+  if (referenceResult.data.kind === "Gambar") {
+    const storagePath = campaignReferenceStoragePath(referenceResult.data.url);
+    if (storagePath) {
+      const storageResult = await context.admin.storage.from("campaign-references").remove([storagePath]);
+      if (storageResult.error) return NextResponse.json({ error: `File gambar gagal dihapus: ${storageResult.error.message}` }, { status: 500 });
+    }
+  }
+
+  const deleteResult = await context.admin.from("campaign_references")
+    .delete()
+    .eq("id", referenceId)
+    .eq("campaign_id", id)
+    .eq("workspace_id", context.campaign.workspace_id)
+    .select("id")
+    .maybeSingle();
+  if (deleteResult.error) return NextResponse.json({ error: deleteResult.error.message }, { status: 500 });
+  if (!deleteResult.data) return NextResponse.json({ error: "Referensi tidak ditemukan atau sudah dihapus." }, { status: 404 });
+  return NextResponse.json({ ok: true });
 }

@@ -8,14 +8,15 @@ export type CampaignLifecycle = "active" | "archived" | "trashed";
 
 export type CampaignTimelinePhase = { id: string; name: string; period: string; purpose: string; status?: string; startDate?: string | null; endDate?: string | null; color?: string | null };
 export type CampaignTimelineConfig = { phaseMode: boolean; phases: CampaignTimelinePhase[]; taskPhase: Record<string, string> };
-export interface CampaignContentConfig { tagline: string; bigMessage: string; intro: string; instructions: string; steps: string[]; promos: Array<{ id: string; title: string; period: string; detail: string; status: string; startDate?: string; endDate?: string }> }
+export interface CampaignContentConfig { tagline: string; bigMessage: string; intro: string; instructions: string; instructionsPinned?: boolean; instructionsPinnedAt?: string | null; steps: string[]; promos: Array<{ id: string; title: string; period: string; detail: string; status: string; startDate?: string; endDate?: string }> }
 export interface Campaign { rowVersion?: number; contentConfig?: CampaignContentConfig }
-export type CampaignSavePatch = Partial<Pick<Campaign, "name" | "brandId" | "objective" | "startDate" | "endDate" | "avatarUrl" | "contentConfig">> & { memberIds?: EntityId[] };
+export type CampaignSavePatch = Partial<Pick<Campaign, "name" | "brandId" | "objective" | "startDate" | "endDate" | "avatarUrl" | "contentConfig" | "budget">> & { memberIds?: EntityId[] };
 export type SaveCampaign = (id: EntityId, patch: CampaignSavePatch, expectedVersion: number) => Promise<void>;
 
 export interface Campaign { id: EntityId; name: string; brand: string; brandId?: EntityId | null; avatarUrl?: string | null; timelineConfig?: CampaignTimelineConfig | null; objective: string; startDate?: string | null; endDate?: string | null; period: string; status: string; progress: number; budget: number; spent: number; kpi: string; tasks: number; content: number; lifecycleStatus: CampaignLifecycle; archivedAt?: string | null; archivedBy?: string | null; deletedAt?: string | null; deletedBy?: string | null; previousLifecycleStatus?: Exclude<CampaignLifecycle, "trashed"> | null }
 export interface CampaignMember { campaignId: EntityId; userId: EntityId }
 export interface CampaignDiscussionNote { id: string; campaignId: EntityId; authorId?: EntityId | null; authorName: string; body: string; createdAt: string; replyTo?: string | null; pinnedToDashboard: boolean }
+export interface CampaignImportantNote { id: string; campaignId: EntityId; source: "discussion" | "brief"; authorName: string; body: string; createdAt: string }
 export interface AdminDashboardNote { id: string; title: string; body: string; createdBy?: EntityId | null; createdByName: string; recipientIds: EntityId[]; expiresAt?: string | null; isActive: boolean; createdAt: string; updatedAt?: string }
 export interface Task { id: EntityId; title: string; brand: string; brandId?: EntityId | null; pic: string; assigneeIds?: EntityId[]; due: string; dueDate?: string; contentCalendarType?: "feed_carousel" | "reels" | null; priority: string; isPriority?: boolean; status: TaskStatus; campaign: EntityId | null; pendingStatusRequest?: TaskStatusRequest | null }
 export interface TaskStatusRequest { id: string; fromStatus: TaskStatus; toStatus: TaskStatus; requestedBy: EntityId; requestedByName: string; createdAt: string }
@@ -37,6 +38,9 @@ export interface CampaignInfluencerActions {
   setInfluencerBookingPayment: (campaignId: EntityId, id: EntityId, status: InfluencerPaymentStatus, amount?: number) => Promise<InfluencerSchedule>;
 }
 export interface Transaction { id?: EntityId; category: string; vendor: string; date: string; amount: number; type: string; status: string; brand: string; brandId?: EntityId | null }
+export type CampaignExpenseCategory = "promo_subsidy" | "ads" | "other";
+export interface CampaignExpense { id: EntityId; campaignId: EntityId; category: CampaignExpenseCategory; title: string; amount: number; date: string; details?: string | null; createdAt?: string; createdBy?: EntityId | null }
+export type CampaignExpenseInput = Pick<CampaignExpense, "category" | "title" | "amount" | "date"> & { details?: string };
 export interface BrandMenu { id: EntityId; name: string; hpp: number; sellingPrice: number }
 export interface Brand { id: EntityId; name: string; primaryColor?: string | null; openingDate?: string | null; description: string; targetCustomer: string; vision: string; mission: string; logoUrl?: string | null; outletImageUrl?: string | null; websiteUrl?: string | null; proposalUrl?: string | null; importantDataUrl?: string | null; menus: BrandMenu[] }
 export interface User { id?: EntityId; name: string; username: string; email: string; whatsapp: string; role: string; status: string; avatarUrl?: string | null; accessRole?: WorkspaceRole }
@@ -56,6 +60,7 @@ export type NotificationKind = "task_created" | "task_changed" | "campaign_chang
 export interface NotificationItem { id: string; kind: NotificationKind; title: string; body: string; createdAt: string; readAt?: string | null; taskId?: EntityId | null; campaignId?: EntityId | null; target: "todo" | "campaigns" }
 
 export interface AppData {
+  campaignExpenses?: CampaignExpense[];
   campaignKpis?: CampaignKpi[];
   taskStatusHistory?: TaskStatusHistory[];
   influencerStatusHistory?: InfluencerStatusHistory[];

@@ -6,7 +6,7 @@ import {
   Check, CheckSquare2, ChevronLeft, ChevronRight, Circle, CircleDollarSign, Clock3,
   Download, Edit3, ExternalLink, Eye, Film, Filter, Handshake, Home, Image as ImageIcon,
   Archive, ChartNoAxesGantt, Info, Instagram, Layers3, LayoutGrid, LayoutPanelLeft, Link2, LogOut, Menu, MessageSquare,
-  Megaphone, Moon, MoreHorizontal, Paperclip, Pin, Plus, Reply, Search, Send, Share2,
+  Megaphone, Moon, MoreHorizontal, Paperclip, Pin, PinOff, Plus, Reply, Search, Send, Share2,
   RotateCcw, Sparkles, Star, Sun, Target, Trash2, Users, X, type LucideIcon,
 } from "lucide-react";
 
@@ -19,7 +19,7 @@ const icons: Record<string, LucideIcon> = {
   filter: Filter, handshake: Handshake, home: Home, image: ImageIcon, info: Info,
   instagram: Instagram, layers: Layers3, link: Link2, "log-out": LogOut, menu: Menu,
   message: MessageSquare, moon: Moon, "more-horizontal": MoreHorizontal,
-  panel: LayoutPanelLeft, paperclip: Paperclip, pin: Pin, plus: Plus, reply: Reply,
+  panel: LayoutPanelLeft, paperclip: Paperclip, pin: Pin, "pin-off": PinOff, plus: Plus, reply: Reply,
   search: Search, send: Send, share: Share2, sparkles: Sparkles, sun: Sun,
   restore: RotateCcw, target: Target, trash: Trash2, users: Users, wallet: CircleDollarSign, clock: Clock3,
   grid: LayoutGrid, timeline: ChartNoAxesGantt,
@@ -64,8 +64,8 @@ export function PriorityPill({ priority }: { priority: string }) {
   return <span className={`priority-pill ${priorityClass[normalized] ?? "priority-medium"}`}>{priority}</span>;
 }
 
-export function PageHeading({ kicker, title, description, action }: { kicker: string; title: string; description: string; action?: React.ReactNode }) {
-  return <div className="page-heading"><div><div className="eyebrow">{kicker}</div><h1>{title}</h1>{description && <p>{description}</p>}</div>{action && <div className="heading-actions">{action}</div>}</div>;
+export function PageHeading({ title, description, action }: { kicker?: string; title: string; description: string; action?: React.ReactNode }) {
+  return <div className="page-heading"><div><h1>{title}</h1>{description && <p>{description}</p>}</div>{action && <div className="heading-actions">{action}</div>}</div>;
 }
 
 export const rupiah = (value: number) => new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(value).replace("IDR", "Rp");

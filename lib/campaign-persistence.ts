@@ -1,9 +1,9 @@
 import type { Campaign, CampaignContentConfig, CampaignSavePatch } from "./types.ts";
 
-export const emptyCampaignContent = (): CampaignContentConfig => ({ tagline: "", bigMessage: "", intro: "", instructions: "", steps: [], promos: [] });
+export const emptyCampaignContent = (): CampaignContentConfig => ({ tagline: "", bigMessage: "", intro: "", instructions: "", instructionsPinned: false, instructionsPinnedAt: null, steps: [], promos: [] });
 
 export function campaignDatabasePatch(patch: CampaignSavePatch) {
-  const keys = { name: "name", brandId: "brand_id", objective: "objective", startDate: "start_date", endDate: "end_date", avatarUrl: "avatar_url", contentConfig: "content_config", memberIds: "member_ids" } as const;
+  const keys = { name: "name", brandId: "brand_id", objective: "objective", startDate: "start_date", endDate: "end_date", avatarUrl: "avatar_url", contentConfig: "content_config", memberIds: "member_ids", budget: "budget" } as const;
   return Object.fromEntries(Object.entries(patch).map(([key, value]) => [keys[key as keyof typeof keys] || key, value]));
 }
 

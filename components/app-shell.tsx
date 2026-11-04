@@ -1,13 +1,15 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
-import type { AdminDashboardNote, AppData, CampaignDiscussionNote, CampaignInfluencerBookingPatch, CampaignInfluencerTheme, CampaignInfluencerThemeInput, CampaignKpiInput, CampaignTimelinePhase, ContentItem, EntityId, Influencer, InfluencerPaymentStatus, InfluencerSchedule, NotificationItem, Task, TaskDraft, TaskPatch, Transaction, User, UserIdentity, ViewName } from "@/lib/types";
+import type { AdminDashboardNote, AppData, CampaignDiscussionNote, CampaignExpense, CampaignExpenseInput, CampaignInfluencerBookingPatch, CampaignInfluencerTheme, CampaignInfluencerThemeInput, CampaignKpiInput, CampaignTimelinePhase, ContentItem, EntityId, Influencer, InfluencerPaymentStatus, InfluencerSchedule, NotificationItem, Task, TaskDraft, TaskPatch, Transaction, User, UserIdentity, ViewName } from "@/lib/types";
 import { allowedTaskStatuses, applyStatusRequest, filteredBoardTasks, isTaskManager } from "@/lib/task-workflow";
 import { createTaskRecord, decideTaskStatus as persistStatusDecision, loadTaskBoard, requestTaskStatus } from "@/lib/supabase/task-board-data";
 import { datedPhase, orderedPhases, validateTimeline } from "@/lib/campaign-timeline";
 import { TaskDialog } from "./task-dialog";
 import { applyTaskPatch, validateTaskPatch, validateKpi } from "@/lib/campaign-overview";
 import { persistTaskPatch, persistCampaignKpi } from "@/lib/supabase/campaign-overview-data";
+import { canCreateCampaignExpense, validateCampaignExpense } from "@/lib/campaign-finance";
+import { persistCampaignExpense } from "@/lib/supabase/campaign-finance-data";
 import { calculateInfluencerPaidAmount, canEditCampaignInfluencers, influencerPaymentStatuses, isInfluencerBookingStatus, nextCampaignInfluencerThemeCode, validateInfluencerContentLink, validateInfluencerScheduleDates } from "@/lib/campaign-influencer";
 import { persistCampaignInfluencerTheme, persistCampaignInfluencerThemeDelete, persistCampaignInfluencerBooking, persistCampaignInfluencerBookingDelete, persistCampaignInfluencerPayment } from "@/lib/supabase/campaign-influencer-data";
 import { demoData } from "@/lib/demo-data";
@@ -574,6 +576,36 @@ export function AppShell() {
     setData((state) => ({ ...state, campaignKpis: [...(state.campaignKpis || []).filter((item) => item.id !== id), kpi] }));
   };
 
+  const createCampaignExpense = async (campaignId: EntityId, input: CampaignExpenseInput) => {
+    const campaign = dataRef.current.campaigns.find((item) => String(item.id) === String(campaignId));
+    if (!campaign) throw new Error("Campaign tidak ditemukan.");
+    if (!canCreateCampaignExpense(identity, campaign)) throw new Error("Hanya Super Admin dan anggota tim yang dapat mencatat pengeluaran pada Campaign aktif.");
+    const validationError = validateCampaignExpense(input);
+    if (validationError) throw new Error(validationError);
+    const generation = sessionGeneration.current;
+    const id = globalThis.crypto.randomUUID();
+    let saved: CampaignExpense;
+    let syncedCampaign: Campaign | undefined;
+    if (authMode === "live") {
+      if (!supabase || !liveContext) throw new Error("Koneksi workspace belum tersedia.");
+      saved = await persistCampaignExpense(supabase, liveContext.workspaceId, campaignId, id, input);
+      const { data: row } = await supabase.from("campaigns").select("*").eq("workspace_id", liveContext.workspaceId).eq("id", campaignId).maybeSingle();
+      if (row) syncedCampaign = storedCampaign(row, campaign);
+    } else {
+      saved = { ...input, id, campaignId, title: input.title.trim(), details: input.details?.trim() || null, createdAt: new Date().toISOString(), createdBy: identity.id ?? identity.username };
+    }
+    if (generation !== sessionGeneration.current) throw new Error("Sesi pengguna berubah. Coba kembali.");
+    setData((state) => ({
+      ...state,
+      campaignExpenses: [saved, ...(state.campaignExpenses || []).filter((item) => String(item.id) !== String(saved.id))],
+      campaigns: state.campaigns.map((item) => {
+        if (String(item.id) !== String(campaignId)) return item;
+        if (!syncedCampaign) return { ...item, spent: Math.max(item.spent, campaign.spent) + saved.amount, rowVersion: (item.rowVersion ?? 1) + 1 };
+        return { ...syncedCampaign, spent: Math.max(item.spent, syncedCampaign.spent), rowVersion: Math.max(item.rowVersion ?? 1, syncedCampaign.rowVersion ?? 1) };
+      }),
+    }));
+  };
+
   const saveCampaign: SaveCampaign = async (campaignId, patch, expectedVersion) => {
     if (!isTaskManager(identity)) throw new Error("Hanya Super Admin dapat menyimpan Campaign.");
     const current = dataRef.current;
@@ -825,7 +857,7 @@ export function AppShell() {
     return saved;
   };
 
-  const common = { saveCampaign, saveInfluencerTheme, deleteInfluencerTheme, saveInfluencerBooking, deleteInfluencerBooking, setInfluencerBookingPayment, saveCampaignTimeline, saveCampaignMembers, createCampaignDiscussionNote, setCampaignNoteDashboardPin, data, identity, mutateTask, decideTaskStatus, openTaskEditor, refreshTaskBoard, taskBoardError, saveCampaignKpi, openModal, openResetPin, navigate, notify, notifyAction, setData, getAccessToken, refreshData, campaignLifecycleAction, requestedCampaignId, onCampaignOpened: () => setRequestedCampaignId(null), uploadMedia, workspaceId: liveContext?.workspaceId, liveMode: Boolean(supabase && liveContext) };
+  const common = { saveCampaign, saveInfluencerTheme, deleteInfluencerTheme, saveInfluencerBooking, deleteInfluencerBooking, setInfluencerBookingPayment, saveCampaignTimeline, saveCampaignMembers, createCampaignDiscussionNote, setCampaignNoteDashboardPin, createCampaignExpense, data, identity, mutateTask, decideTaskStatus, openTaskEditor, refreshTaskBoard, taskBoardError, saveCampaignKpi, openModal, openResetPin, navigate, notify, notifyAction, setData, getAccessToken, refreshData, campaignLifecycleAction, requestedCampaignId, onCampaignOpened: () => setRequestedCampaignId(null), uploadMedia, workspaceId: liveContext?.workspaceId, liveMode: Boolean(supabase && liveContext) };
 
   const authenticate = async (action: "login" | "signup", name: string, username: string, email: string, whatsapp: string, pin: string) => {
     const demo = action === "login" && !supabase && demoLoginAllowed()
