@@ -2,7 +2,7 @@
 
 import { useMemo, useState, type FormEvent } from "react";
 import type { Influencer, InfluencerProfileInput, InfluencerRateCard } from "@/lib/types";
-import { influencerNiches, influencerRateCardPresets, legacyInfluencerNiches } from "@/lib/influencer-profiles";
+import { influencerNiches, influencerRateCardPresets, legacyInfluencerNiches, normalizeWhatsAppNumber } from "@/lib/influencer-profiles";
 import { Icon } from "./ui";
 
 type Props = {
@@ -19,6 +19,7 @@ function newPackage(): PackageDraft {
 
 export function InfluencerProfileDialog({ initial, onClose, onSave }: Props) {
   const [name, setName] = useState(initial?.name || "");
+  const [whatsapp, setWhatsapp] = useState(initial?.whatsapp || "");
   const [collaborationType, setCollaborationType] = useState<InfluencerProfileInput["collaborationType"]>(initial?.collaborationType || "Influencer");
   const [niches, setNiches] = useState<string[]>(() => initial?.niches?.length ? initial.niches : legacyInfluencerNiches(initial?.niche));
   const [customNiche, setCustomNiche] = useState(initial?.customNiche || (legacyInfluencerNiches(initial?.niche).includes("Lainnya") ? initial?.niche || "" : ""));
@@ -56,6 +57,7 @@ export function InfluencerProfileDialog({ initial, onClose, onSave }: Props) {
     setError("");
     const input: InfluencerProfileInput = {
       name,
+      whatsapp: normalizeWhatsAppNumber(whatsapp),
       collaborationType,
       niches,
       customNiche,
@@ -77,6 +79,7 @@ export function InfluencerProfileDialog({ initial, onClose, onSave }: Props) {
       <div className="modal-head"><div><h2 id="influencer-profile-title">{title}</h2><p>Kelola jenis kolaborasi, akun sosial, niche, dan paket layanan.</p></div><button type="button" className="icon-button modal-close" onClick={onClose} disabled={saving} aria-label="Tutup"><Icon name="close" /></button></div>
       <form className="form-stack" onSubmit={(event) => void submit(event)}>
         <div className="form-field"><label htmlFor="influencer-name">Nama influencer *</label><input id="influencer-name" className="modal-input" value={name} onChange={(event) => setName(event.target.value)} maxLength={160} required placeholder="Contoh: Nadia Kuliner" /></div>
+        <div className="form-field"><label htmlFor="influencer-whatsapp">Nomor WhatsApp</label><input id="influencer-whatsapp" className="modal-input" type="tel" inputMode="tel" autoComplete="tel" value={whatsapp} onChange={(event) => setWhatsapp(event.target.value)} maxLength={30} placeholder="Contoh: +62 812 3456 7890" /><small>Opsional. Nomor dapat diklik dari daftar influencer untuk membuka WhatsApp.</small></div>
         <div className="form-field"><label htmlFor="influencer-kind">Jenis kolaborasi *</label><select id="influencer-kind" className="modal-input" value={collaborationType} onChange={(event) => setCollaborationType(event.target.value as InfluencerProfileInput["collaborationType"])}><option>Influencer</option><option>Barter Endorse</option></select><small>Nilai barter dicatat sebagai estimasi dan tidak masuk realisasi pengeluaran.</small></div>
 
         <fieldset className="influencer-profile-fieldset"><legend>Niche</legend><div className="influencer-niche-options">{influencerNiches.map((niche) => <label key={niche}><input type="checkbox" checked={niches.includes(niche)} onChange={() => toggleNiche(niche)} /><span>{niche}</span></label>)}</div>{niches.includes("Lainnya") && <input className="modal-input" value={customNiche} onChange={(event) => setCustomNiche(event.target.value)} maxLength={80} placeholder="Tulis niche lainnya" aria-label="Niche lainnya" />}</fieldset>

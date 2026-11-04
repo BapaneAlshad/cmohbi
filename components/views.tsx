@@ -19,7 +19,7 @@ import { TaskAssigneeAvatars, TaskAssigneePicker, taskAssigneeIds, taskAssigneeN
 import { isMemberDashboard, memberCampaigns, memberDashboardNotes, memberDashboardTasks } from "@/lib/member-dashboard";
 import { taskIsPriority } from "@/lib/task-workflow";
 import { InfluencerProfileDialog } from "./influencer-profile-dialog";
-import { compactFollowerCount, influencerAccountUrl } from "@/lib/influencer-profiles";
+import { compactFollowerCount, influencerAccountUrl, influencerWhatsAppUrl } from "@/lib/influencer-profiles";
 
 export type CommonProps = CampaignInfluencerActions & {
   saveCampaign: SaveCampaign;
@@ -450,7 +450,7 @@ export function InfluencersView({ data, saveInfluencerProfile, saveInfluencerBoo
       const packageCards = item.rateCards || [];
       const lowest = item.collaborationType === "Barter Endorse" ? null : packageCards.length ? Math.min(...packageCards.map((card) => card.amount)) : item.rate;
       return <tr key={item.id ?? item.name}>
-        <td><div className="table-person"><Avatar name={item.name} tone={index % 2 ? "orange" : "purple"} /><div><strong>{item.name}</strong><small>{item.status}</small></div></div></td>
+        <td><div className="table-person"><Avatar name={item.name} tone={index % 2 ? "orange" : "purple"} /><div><strong>{item.name}</strong><small>{item.status}</small>{item.whatsapp && <a className="influencer-whatsapp-link" href={influencerWhatsAppUrl(item.whatsapp) || undefined} target="_blank" rel="noreferrer" aria-label={`Hubungi ${item.name} melalui WhatsApp`}>WA · {item.whatsapp}</a>}</div></div></td>
         <td><span className={`influencer-kind-badge ${item.collaborationType === "Barter Endorse" ? "barter" : "paid"}`}>{item.collaborationType || "Influencer"}</span></td>
         <td><div className="influencer-niche-tags">{niches.length ? niches.map((niche) => <span key={niche}>{niche}</span>) : <small>Belum diisi</small>}{item.customNiche && <span>{item.customNiche}</span>}</div></td>
         <td><div className="influencer-account-links">{accounts.map((account, accountIndex) => { const href = account.username ? influencerAccountUrl(account.platform, account.username) : null; return <div className="influencer-account-link" key={`${account.platform}-${account.id ?? accountIndex}`}><span className={`influencer-platform-mark ${account.platform === "TikTok" ? "tiktok" : "instagram"}`}>{account.platform === "TikTok" ? "TT" : "IG"}</span>{href ? <a href={href} target="_blank" rel="noreferrer">@{account.username}</a> : <span className="muted-cell">{account.platform} · username belum diisi</span>}<small>{compactFollowerCount(account.followers)} followers</small></div>; })}</div></td>

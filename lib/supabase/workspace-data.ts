@@ -304,6 +304,7 @@ export async function loadWorkspaceData(
       return {
         id: influencer.id,
         name: influencer.name,
+        whatsapp: influencer.whatsapp ? String(influencer.whatsapp) : "",
         platform: legacyPlatform,
         niche: influencer.niche || "Belum diisi",
         rate: Number(influencer.rate),

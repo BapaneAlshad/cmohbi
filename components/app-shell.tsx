@@ -12,7 +12,7 @@ import { canCreateCampaignExpense, validateCampaignExpense } from "@/lib/campaig
 import { persistCampaignExpense } from "@/lib/supabase/campaign-finance-data";
 import { calculateInfluencerPaidAmount, canEditCampaignInfluencers, influencerPaymentStatuses, isInfluencerBookingStatus, nextCampaignInfluencerThemeCode, validateInfluencerContentLink, validateInfluencerScheduleDates } from "@/lib/campaign-influencer";
 import { persistCampaignInfluencerTheme, persistCampaignInfluencerThemeDelete, persistCampaignInfluencerBooking, persistCampaignInfluencerBookingDelete, persistCampaignInfluencerPayment, persistInfluencerProfile } from "@/lib/supabase/campaign-influencer-data";
-import { influencerProfileError, influencerProfileLegacyFields, normalizeInfluencerUsername } from "@/lib/influencer-profiles";
+import { influencerProfileError, influencerProfileLegacyFields, normalizeInfluencerUsername, normalizeWhatsAppNumber } from "@/lib/influencer-profiles";
 import { demoData } from "@/lib/demo-data";
 import { demoLoginAllowed, emptyWorkspaceData } from "@/lib/production-policy";
 import { campaignVersionError, emptyCampaignContent, storedCampaign } from "@/lib/campaign-persistence";
@@ -839,6 +839,7 @@ export function AppShell() {
         ...(existing || { engagement: "—", status: "Aktif" }),
         id: nextId,
         name: input.name.trim(),
+        whatsapp: normalizeWhatsAppNumber(input.whatsapp),
         platform: legacy.platform as Influencer["platform"],
         niche: legacy.niche,
         rate: legacy.rate,

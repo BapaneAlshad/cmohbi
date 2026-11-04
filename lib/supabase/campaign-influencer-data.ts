@@ -16,7 +16,7 @@ function mapInfluencer(row: SavedRow): Influencer {
   const rateCards = Array.isArray(row.rate_cards) ? row.rate_cards as SavedRow[] : [];
   const storedNiches = Array.isArray(row.niches) ? row.niches.map(String) : [];
   return {
-    id: String(row.id), name: String(row.name), platform,
+    id: String(row.id), name: String(row.name), whatsapp: row.whatsapp ? String(row.whatsapp) : "", platform,
     collaborationType: row.collaboration_type === "Barter Endorse" ? "Barter Endorse" : "Influencer",
     niche: String(row.niche || "Belum diisi"), niches: storedNiches,
     customNiche: String(row.custom_niche || ""), rate: Number(row.rate),
@@ -34,12 +34,12 @@ function mapInfluencer(row: SavedRow): Influencer {
 }
 
 export async function persistInfluencerProfile(client: SupabaseClient, workspaceId: string, input: InfluencerProfileInput, id?: EntityId) {
-  const { data, error } = await client.rpc("save_marketing_influencer_profile", {
+  const { data, error } = await client.rpc("save_marketing_influencer_profile_with_whatsapp", {
     p_workspace_id: workspaceId,
     p_id: id ?? null,
     p_input: input,
   });
-  if (error) throw new Error(error.code === "PGRST202" ? "Penyimpanan akun dan paket influencer belum tersedia. Terapkan migrasi database influencer terbaru." : error.message);
+  if (error) throw new Error(error.code === "PGRST202" ? "Penyimpanan nomor WhatsApp influencer belum tersedia. Terapkan migrasi database WhatsApp influencer." : error.message);
   if (!data || typeof data !== "object") throw new Error("Hasil penyimpanan profil influencer tidak valid.");
   return mapInfluencer(data as SavedRow);
 }

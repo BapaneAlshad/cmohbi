@@ -29,8 +29,29 @@ export function normalizeInfluencerUsername(value: string) {
   return value.trim().replace(/^@+/, "");
 }
 
+export function normalizeWhatsAppNumber(value: string) {
+  const digits = value.trim().replace(/\D/g, "");
+  if (!digits) return "";
+  if (digits.startsWith("00")) return `+${digits.slice(2)}`;
+  if (digits.startsWith("0")) return `+62${digits.slice(1)}`;
+  if (digits.startsWith("8") && digits.length <= 13) return `+62${digits}`;
+  return `+${digits}`;
+}
+
+export function influencerWhatsAppUrl(value: string) {
+  const digits = normalizeWhatsAppNumber(value).replace(/\D/g, "");
+  return digits ? `https://wa.me/${digits}` : null;
+}
+
 export function influencerProfileError(input: InfluencerProfileInput): string | null {
   if (!input.name.trim() || input.name.trim().length > 160) return "Nama influencer wajib diisi (maksimal 160 karakter).";
+  const whatsapp = input.whatsapp.trim();
+  if (whatsapp) {
+    const normalized = normalizeWhatsAppNumber(whatsapp);
+    if (!/^\+?[0-9][0-9(). -]*$/.test(whatsapp) || !/^\+[1-9][0-9]{7,14}$/.test(normalized)) {
+      return "Nomor WhatsApp tidak valid. Masukkan 8–15 digit, misalnya +62 812 3456 7890.";
+    }
+  }
   if (!influencerCollaborationTypes.includes(input.collaborationType)) return "Jenis influencer tidak valid.";
   if (!Array.isArray(input.niches) || input.niches.length === 0 || input.niches.some((item) => !influencerNiches.includes(item as (typeof influencerNiches)[number]))) {
     return "Pilih minimal satu niche yang tersedia.";

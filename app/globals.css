@@ -1656,6 +1656,8 @@ body.dark-mode .platform-logo.tiktok, body.dark-mode .platform-badge.tiktok { ba
 .influencer-account-link > a:hover { color: var(--accent); text-decoration: underline; }
 .influencer-account-link > small { color: var(--muted); font-size: 9px; }
 .influencer-account-link .muted-cell { grid-column: 2; font-size: 9px; }
+.influencer-whatsapp-link { display: inline-block; margin-top: 3px; color: #16804a; font-size: 10px; font-weight: 550; }
+.influencer-whatsapp-link:hover { text-decoration: underline; }
 .influencer-rate-card-summary { display: grid; gap: 4px; min-width: 150px; }
 .influencer-rate-card-summary > strong { font-size: 11px; }
 .influencer-rate-card-summary > small, .influencer-rate-card-summary > span { color: var(--muted); font-size: 9px; }
@@ -1664,6 +1666,7 @@ body.dark-mode .platform-logo.tiktok, body.dark-mode .platform-badge.tiktok { ba
 body.dark-mode .influencer-niche-options label, body.dark-mode .influencer-account-editor, body.dark-mode .influencer-package-editor { background: #22252c; border-color: #3a3e47; color: #d6d8de; }
 body.dark-mode .influencer-kind-badge.paid { color: #d2c8ff; background: #30294b; border-color: #494070; }
 body.dark-mode .influencer-kind-badge.barter { color: #f5ce86; background: #3b2f1d; border-color: #6f5123; }
+body.dark-mode .influencer-whatsapp-link { color: #75d4a0; }
 body.dark-mode .influencer-niche-tags > span { background: #292c34; color: #c9cbd2; }
 body.dark-mode .influencer-account-link > a { color: #f3f4f6; }
 body.dark-mode .influencer-payment-not-applicable { background: #292c34; border-color: #444852; color: #bcc0ca; }
