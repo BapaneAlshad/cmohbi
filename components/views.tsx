@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState, type CSSProperties, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent } from "react";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import type { SaveCampaign, AppData, CampaignInfluencerActions, Brand, BrandMenu, CampaignKpiInput, CampaignTimelinePhase, EntityId, SocialPlatform, TaskPatch, TaskStatus, UserIdentity } from "@/lib/types";
+import type { SaveCampaign, AppData, CampaignInfluencerActions, Brand, BrandMenu, CampaignKpiInput, CampaignTimelinePhase, EntityId, Influencer, SocialPlatform, TaskPatch, TaskStatus, UserIdentity } from "@/lib/types";
 import { Avatar, compact, Icon, PageHeading, PriorityPill, rupiah, StatusPill, TaskPriorityStar } from "./ui";
 import { CampaignAvatar } from "./campaign/campaign-primitives";
 import { CampaignCardProgress } from "./campaign/campaign-card-progress";
@@ -14,9 +14,12 @@ import { campaignPeriodLabel } from "@/lib/campaign-form";
 import { formatDisplayDate, formatDisplayDateTime, formatTaskDeadline } from "@/lib/date-format";
 import { displayInfluencerBookingStatus, displayInfluencerPaymentStatus, influencerBookingStatusTone, influencerPaymentStatusTone } from "@/lib/campaign-influencer";
 import { canManageUsers, accessLevels } from "@/lib/user-management";
+import { userAvatarExtension, validateUserAvatar } from "@/lib/user-avatar";
 import { TaskAssigneeAvatars, TaskAssigneePicker, taskAssigneeIds, taskAssigneeNames } from "./task-assignees";
 import { isMemberDashboard, memberCampaigns, memberDashboardNotes, memberDashboardTasks } from "@/lib/member-dashboard";
 import { taskIsPriority } from "@/lib/task-workflow";
+import { InfluencerProfileDialog } from "./influencer-profile-dialog";
+import { compactFollowerCount, influencerAccountUrl } from "@/lib/influencer-profiles";
 
 export type CommonProps = CampaignInfluencerActions & {
   saveCampaign: SaveCampaign;
@@ -40,6 +43,7 @@ export type CommonProps = CampaignInfluencerActions & {
   notifyAction?: (message: string, actionLabel: string, action: () => void) => void;
   setData: React.Dispatch<React.SetStateAction<AppData>>;
   getAccessToken?: () => Promise<string | null>;
+  uploadOwnAvatar?: (file: File) => Promise<string>;
   uploadMedia?: (file: File, bucket?: string, prefix?: string) => Promise<string>;
   workspaceId?: string;
   refreshData?: () => Promise<void>;
@@ -161,7 +165,7 @@ export function BrandView({ data, identity, navigate, notify, setData, uploadMed
   const [search, setSearch] = useState("");
   const [brandDialog, setBrandDialog] = useState<Brand | null | undefined>(undefined);
   const [menuDialog, setMenuDialog] = useState<{ brand: Brand; menu?: BrandMenu } | null>(null);
-  const canEdit = !identity?.accessRole || identity.accessRole !== "viewer";
+  const canEdit = canManageUsers(identity);
   const selectedBrand = brands.find((brand) => String(brand.id) === String(selectedId));
   const filteredBrands = brands.filter((brand) => `${brand.name} ${brand.description} ${brand.targetCustomer}`.toLowerCase().includes(search.trim().toLowerCase()));
 
@@ -171,12 +175,14 @@ export function BrandView({ data, identity, navigate, notify, setData, uploadMed
   }, [brands, selectedBrand]);
 
   const saveBrand = (nextBrand: Brand) => {
+    if (!canEdit) { notify("Hanya Super Admin yang dapat mengubah data Brand."); return; }
     setData((current) => ({ ...current, brands: current.brands.some((brand) => String(brand.id) === String(nextBrand.id)) ? current.brands.map((brand) => String(brand.id) === String(nextBrand.id) ? nextBrand : brand) : [nextBrand, ...current.brands] }));
     setSelectedId(nextBrand.id);
     setBrandDialog(undefined);
     notify(`Brand ${nextBrand.name} berhasil disimpan.`);
   };
   const saveMenu = (nextMenu: BrandMenu) => {
+    if (!canEdit) { notify("Hanya Super Admin yang dapat mengubah menu Brand."); return; }
     if (!menuDialog) return;
     setData((current) => ({ ...current, brands: current.brands.map((brand) => String(brand.id) !== String(menuDialog.brand.id) ? brand : { ...brand, menus: brand.menus.some((menu) => String(menu.id) === String(nextMenu.id)) ? brand.menus.map((menu) => String(menu.id) === String(nextMenu.id) ? nextMenu : menu) : [...brand.menus, nextMenu] }) }));
     setMenuDialog(null);
@@ -188,7 +194,7 @@ export function BrandView({ data, identity, navigate, notify, setData, uploadMed
     notify(`Menu ${menu.name} dihapus.`);
   };
 
-  if (!selectedBrand) return <><PageHeading kicker="Workspace / Brand" title="Pusat brand" description="Simpan identitas brand sekali, lalu gunakan sebagai acuan campaign, tugas, dan pengeluaran." action={canEdit ? <PrimaryAction onClick={() => setBrandDialog(null)}>Tambah brand</PrimaryAction> : undefined} /><div className="card brand-empty-state"><div className="brand-empty-icon"><Icon name="book" size={22} /></div><strong>Belum ada brand</strong><p>Tambahkan brand pertama agar pilihan brand di Campaign, To-Do, dan Keuangan lebih konsisten.</p>{canEdit && <button className="button button-primary" onClick={() => setBrandDialog(null)}><Icon name="plus" size={14} />Tambah brand</button>}</div>{brandDialog !== undefined && <BrandDialog brand={brandDialog} onClose={() => setBrandDialog(undefined)} onSave={saveBrand} uploadMedia={uploadMedia} workspaceId={workspaceId} />}</>;
+  if (!selectedBrand) return <><PageHeading kicker="Workspace / Brand" title="Pusat brand" description="Simpan identitas brand sekali, lalu gunakan sebagai acuan campaign, tugas, dan pengeluaran." action={canEdit ? <PrimaryAction onClick={() => setBrandDialog(null)}>Tambah brand</PrimaryAction> : undefined} /><div className="card brand-empty-state"><div className="brand-empty-icon"><Icon name="book" size={22} /></div><strong>Belum ada brand</strong><p>{canEdit ? "Tambahkan brand pertama agar pilihan brand di Campaign, To-Do, dan Keuangan lebih konsisten." : "Belum ada data brand yang tersedia di workspace ini."}</p>{canEdit && <button className="button button-primary" onClick={() => setBrandDialog(null)}><Icon name="plus" size={14} />Tambah brand</button>}</div>{canEdit && brandDialog !== undefined && <BrandDialog brand={brandDialog} onClose={() => setBrandDialog(undefined)} onSave={saveBrand} uploadMedia={uploadMedia} workspaceId={workspaceId} />}</>;
 
   const brandCampaigns = data.campaigns.filter((campaign) => campaign.brand === selectedBrand.name && (campaign.lifecycleStatus || "active") !== "trashed");
   const brandTasks = data.tasks.filter((task) => task.brand === selectedBrand.name && task.status !== "Done");
@@ -200,7 +206,7 @@ export function BrandView({ data, identity, navigate, notify, setData, uploadMed
     <PageHeading kicker="Workspace / Brand" title="Pusat brand" description="Satu sumber informasi untuk menjaga campaign, tugas, dan pengeluaran tetap sesuai identitas brand." action={canEdit ? <PrimaryAction onClick={() => setBrandDialog(selectedBrand)}>Tambah brand</PrimaryAction> : undefined} />
     <div className="brand-page-layout">
       <aside className="brand-directory card">
-        <div className="brand-directory-head"><div><h2>Daftar brand</h2><span>{brands.length} brand tersimpan</span></div><button className="icon-button" onClick={() => setBrandDialog(null)} disabled={!canEdit} aria-label="Tambah brand"><Icon name="plus" size={15} /></button></div>
+        <div className="brand-directory-head"><div><h2>Daftar brand</h2><span>{brands.length} brand tersimpan</span></div>{canEdit && <button className="icon-button" onClick={() => setBrandDialog(null)} aria-label="Tambah brand"><Icon name="plus" size={15} /></button>}</div>
         <label className="brand-search"><Icon name="search" size={14} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Cari brand..." aria-label="Cari brand" /></label>
         <div className="brand-directory-list">{filteredBrands.length ? filteredBrands.map((brand) => <button type="button" className={`brand-directory-item ${String(brand.id) === String(selectedBrand.id) ? "active" : ""}`} key={brand.id} onClick={() => setSelectedId(brand.id)}><BrandAvatar brand={brand} /><span><strong>{brand.name}</strong><small>{brand.menus.length} menu · {data.campaigns.filter((campaign) => campaign.brand === brand.name).length} campaign</small></span><Icon name="chevron-right" size={14} /></button>) : <span className="brand-directory-empty">Brand tidak ditemukan.</span>}</div>
       </aside>
@@ -213,8 +219,8 @@ export function BrandView({ data, identity, navigate, notify, setData, uploadMed
         <section className="card brand-usage-card"><BrandSectionTitle icon="layers" title="Dipakai di workspace" description="Data di bawah ini mengambil sumber existing berdasarkan nama brand." /><div className="brand-usage-grid"><BrandUsage label="Campaign terbaru" empty="Belum ada campaign untuk brand ini." items={brandCampaigns.slice(0, 4).map((campaign) => `${campaign.name} · ${campaign.status}`)} onClick={() => navigate("campaigns")} /><BrandUsage label="Tugas terbuka" empty="Belum ada tugas terbuka untuk brand ini." items={brandTasks.slice(0, 4).map((task) => `${task.title} · ${formatTaskDeadline(task, data.campaigns.find((campaign) => String(campaign.id) === String(task.campaign)))}`)} onClick={() => navigate("todo")} /><BrandUsage label="Pengeluaran terakhir" empty="Belum ada transaksi untuk brand ini." items={brandTransactions.slice(0, 4).map((transaction) => `${transaction.vendor} · ${rupiah(transaction.amount)}`)} onClick={() => navigate("partners")} /></div></section>
       </main>
     </div>
-    {brandDialog !== undefined && <BrandDialog brand={brandDialog} onClose={() => setBrandDialog(undefined)} onSave={saveBrand} uploadMedia={uploadMedia} workspaceId={workspaceId} />}
-    {menuDialog && <BrandMenuDialog menu={menuDialog.menu} onClose={() => setMenuDialog(null)} onSave={saveMenu} />}
+    {canEdit && brandDialog !== undefined && <BrandDialog brand={brandDialog} onClose={() => setBrandDialog(undefined)} onSave={saveBrand} uploadMedia={uploadMedia} workspaceId={workspaceId} />}
+    {canEdit && menuDialog && <BrandMenuDialog menu={menuDialog.menu} onClose={() => setMenuDialog(null)} onSave={saveMenu} />}
   </>;
 }
 
@@ -420,12 +426,15 @@ export function PartnersView({ data, openModal }: CommonProps) {
   </>;
 }
 
-export function InfluencersView({ data, openModal, saveInfluencerBooking, notify, identity }: CommonProps) {
+export function InfluencersView({ data, saveInfluencerProfile, saveInfluencerBooking, notify, identity }: CommonProps) {
   const [linkingId, setLinkingId] = useState<string | null>(null);
+  const [editingInfluencer, setEditingInfluencer] = useState<Influencer | null>(null);
+  const [profileDialogOpen, setProfileDialogOpen] = useState(false);
   const activeCampaigns = data.campaigns.filter((campaign) => (campaign.lifecycleStatus || "active") === "active");
   const linked = (schedule: AppData["influencerSchedules"][number]) => data.campaigns.some((campaign) => String(campaign.id) === String(schedule.campaignId ?? "") || (!schedule.campaignId && campaign.name === schedule.campaign));
   const unlinked = data.influencerSchedules.filter((schedule) => !linked(schedule));
   const readOnly = identity?.accessRole === "viewer";
+  const canEditProfiles = ["owner", "admin", "member"].includes(identity?.accessRole || "");
   const linkToCampaign = async (id: string, campaignId: string) => {
     const campaign = activeCampaigns.find((item) => String(item.id) === campaignId);
     if (!campaign || readOnly || linkingId) return;
@@ -434,9 +443,68 @@ export function InfluencersView({ data, openModal, saveInfluencerBooking, notify
     catch (error) { notify((error as Error).message); }
     finally { setLinkingId(null); }
   };
-  return <><PageHeading kicker="Operasional / Influencer" title="Data Influencer" description="Kelola master influencer dan tautkan jadwal lama ke campaign." action={<PrimaryAction onClick={() => openModal("influencer")}>Tambah influencer</PrimaryAction>} />
-    <div className="card table-card"><div className="card-header"><div><h2 className="card-title">Master influencer / KOL</h2><p className="card-subtitle">Sumber pilihan untuk jadwal campaign · Instagram, Facebook, dan TikTok</p></div></div><div className="table-wrap"><table className="data-table"><thead><tr><th>Influencer</th><th>Platform</th><th>Niche</th><th>Followers</th><th>Engagement</th><th>Rate card</th><th>Status</th></tr></thead><tbody>{data.influencers.map((item, index) => <tr key={item.id ?? item.name}><td><div className="table-person"><Avatar name={item.name} tone={index % 2 ? "orange" : "purple"} /><span>{item.name}</span></div></td><td>{item.platform}</td><td>{item.niche}</td><td>{item.followers}</td><td className="trend-up">{item.engagement}</td><td>{rupiah(item.rate)}</td><td><StatusPill status={item.status} /></td></tr>)}</tbody></table></div></div>
-    {unlinked.length > 0 && <section className="card table-card" style={{ marginTop: 18 }}><div className="card-header"><div><h2 className="card-title">Jadwal tanpa campaign</h2><p className="card-subtitle">Histori tetap tersimpan. Pilih campaign untuk menautkan record yang sudah ada.</p></div><span className="status-pill">{unlinked.length} belum tertaut</span></div><div className="table-wrap"><table className="data-table"><thead><tr><th>Influencer</th><th>Deliverable</th><th>Jadwal lama</th><th>Biaya</th><th>Status / pembayaran</th><th>Tautkan</th></tr></thead><tbody>{unlinked.map((item) => <tr key={String(item.id)}><td>{item.influencer}<small>{item.platform}</small></td><td>{item.content}</td><td>{formatDisplayDate(item.visitDate)} · {formatDisplayDate(item.uploadDate || item.date)}</td><td>{rupiah(item.rate)}<small>Spent {rupiah(item.spent)}</small></td><td><StatusPill status={displayInfluencerBookingStatus(item.status)} className={`campaign-influencer-status-pill cooperation-${influencerBookingStatusTone(item.status)}`} /> <StatusPill status={displayInfluencerPaymentStatus(item.paymentStatus)} className={`campaign-influencer-status-pill payment-${influencerPaymentStatusTone(item.paymentStatus)}`} /></td><td><select className="input" aria-label={`Tautkan jadwal ${item.influencer} ke campaign`} disabled={readOnly || Boolean(linkingId) || !activeCampaigns.length} value="" onChange={(event) => void linkToCampaign(String(item.id), event.target.value)}><option value="" disabled>{activeCampaigns.length ? "Pilih campaign" : "Tidak ada campaign"}</option>{activeCampaigns.map((campaign) => <option value={String(campaign.id)} key={campaign.id}>{campaign.name}</option>)}</select></td></tr>)}</tbody></table></div></section>}
+  return <><PageHeading kicker="Operasional / Influencer" title="Data Influencer" description="Kelola profil, akun sosial, niche, dan paket layanan untuk campaign." action={canEditProfiles ? <PrimaryAction onClick={() => { setEditingInfluencer(null); setProfileDialogOpen(true); }}>Tambah influencer</PrimaryAction> : undefined} />
+    <div className="card table-card"><div className="card-header"><div><h2 className="card-title">Master influencer / KOL</h2><p className="card-subtitle">Pilih paket rate card saat menambahkan jadwal ke Campaign · Instagram dan TikTok</p></div></div><div className="table-wrap"><table className="data-table influencer-master-table"><thead><tr><th>Influencer</th><th>Jenis</th><th>Niche</th><th>Akun sosial &amp; followers</th><th>Paket</th>{canEditProfiles && <th>Aksi</th>}</tr></thead><tbody>{data.influencers.map((item, index) => {
+      const accounts = item.accounts?.length ? item.accounts : [{ platform: item.platform === "TikTok" ? "TikTok" as const : "Instagram" as const, username: null, followers: Number.parseInt(item.followers.replace(/\D/g, ""), 10) || 0 }];
+      const niches = item.niches?.length ? item.niches.filter((niche) => niche !== "Lainnya") : item.niche.split(",").map((niche) => niche.trim()).filter((niche) => niche && niche !== "Belum diisi");
+      const packageCards = item.rateCards || [];
+      const lowest = item.collaborationType === "Barter Endorse" ? null : packageCards.length ? Math.min(...packageCards.map((card) => card.amount)) : item.rate;
+      return <tr key={item.id ?? item.name}>
+        <td><div className="table-person"><Avatar name={item.name} tone={index % 2 ? "orange" : "purple"} /><div><strong>{item.name}</strong><small>{item.status}</small></div></div></td>
+        <td><span className={`influencer-kind-badge ${item.collaborationType === "Barter Endorse" ? "barter" : "paid"}`}>{item.collaborationType || "Influencer"}</span></td>
+        <td><div className="influencer-niche-tags">{niches.length ? niches.map((niche) => <span key={niche}>{niche}</span>) : <small>Belum diisi</small>}{item.customNiche && <span>{item.customNiche}</span>}</div></td>
+        <td><div className="influencer-account-links">{accounts.map((account, accountIndex) => { const href = account.username ? influencerAccountUrl(account.platform, account.username) : null; return <div className="influencer-account-link" key={`${account.platform}-${account.id ?? accountIndex}`}><span className={`influencer-platform-mark ${account.platform === "TikTok" ? "tiktok" : "instagram"}`}>{account.platform === "TikTok" ? "TT" : "IG"}</span>{href ? <a href={href} target="_blank" rel="noreferrer">@{account.username}</a> : <span className="muted-cell">{account.platform} · username belum diisi</span>}<small>{compactFollowerCount(account.followers)} followers</small></div>; })}</div></td>
+        <td><div className="influencer-rate-card-summary"><strong>{packageCards.length || 1} paket</strong><small>{item.collaborationType === "Barter Endorse" ? "Nilai barter tersimpan sebagai estimasi" : `Mulai ${rupiah(lowest ?? item.rate)}`}</small>{packageCards.slice(0, 2).map((card) => <span key={card.id || card.name}>{card.name} · {rupiah(card.amount)}</span>)}{packageCards.length > 2 && <span>+{packageCards.length - 2} paket lainnya</span>}</div></td>
+        {canEditProfiles && <td><button className="button button-soft button-sm" onClick={() => { setEditingInfluencer(item); setProfileDialogOpen(true); }}><Icon name="edit" size={13} />Edit</button></td>}
+      </tr>;
+    })}</tbody></table></div>{data.influencers.length === 0 && <div className="influencer-master-empty"><strong>Belum ada data influencer</strong><span>Tambahkan profil untuk memilih akun dan paket saat menyusun jadwal campaign.</span></div>}</div>
+    {unlinked.length > 0 && (
+      <section className="card table-card" style={{ marginTop: 18 }}>
+        <div className="card-header">
+          <div>
+            <h2 className="card-title">Jadwal tanpa campaign</h2>
+            <p className="card-subtitle">Histori tetap tersimpan. Pilih campaign untuk menautkan record yang sudah ada.</p>
+          </div>
+          <span className="status-pill">{unlinked.length} belum tertaut</span>
+        </div>
+        <div className="table-wrap">
+          <table className="data-table">
+            <thead><tr><th>Influencer</th><th>Deliverable</th><th>Jadwal lama</th><th>Biaya</th><th>Status / pembayaran</th><th>Tautkan</th></tr></thead>
+            <tbody>
+              {unlinked.map((item) => (
+                <tr key={String(item.id)}>
+                  <td>{item.influencer}<small>{item.platform}</small></td>
+                  <td>{item.content}</td>
+                  <td>{formatDisplayDate(item.visitDate)} · {formatDisplayDate(item.uploadDate || item.date)}</td>
+                  <td>
+                    {item.collaborationType === "Barter Endorse" ? (
+                      <><span>Barter</span><small>Estimasi {rupiah(item.barterValue ?? 0)}</small></>
+                    ) : (
+                      <><span>{rupiah(item.rate)}</span><small>Spent {rupiah(item.spent)}</small></>
+                    )}
+                  </td>
+                  <td>
+                    <StatusPill status={displayInfluencerBookingStatus(item.status)} className={`campaign-influencer-status-pill cooperation-${influencerBookingStatusTone(item.status)}`} />
+                    {item.collaborationType === "Barter Endorse" ? (
+                      <span className="influencer-payment-not-applicable">Tidak berlaku</span>
+                    ) : (
+                      <StatusPill status={displayInfluencerPaymentStatus(item.paymentStatus)} className={`campaign-influencer-status-pill payment-${influencerPaymentStatusTone(item.paymentStatus)}`} />
+                    )}
+                  </td>
+                  <td>
+                    <select className="input" aria-label={`Tautkan jadwal ${item.influencer} ke campaign`} disabled={readOnly || Boolean(linkingId) || !activeCampaigns.length} value="" onChange={(event) => void linkToCampaign(String(item.id), event.target.value)}>
+                      <option value="" disabled>{activeCampaigns.length ? "Pilih campaign" : "Tidak ada campaign"}</option>
+                      {activeCampaigns.map((campaign) => <option value={String(campaign.id)} key={campaign.id}>{campaign.name}</option>)}
+                    </select>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    )}
+    {profileDialogOpen && <InfluencerProfileDialog initial={editingInfluencer || undefined} onClose={() => { setProfileDialogOpen(false); setEditingInfluencer(null); }} onSave={async (input, id) => { await saveInfluencerProfile(input, id); notify(editingInfluencer ? "Profil influencer diperbarui." : "Profil influencer ditambahkan."); }} />}
   </>;
 }
 
@@ -483,10 +551,31 @@ export function AnalyticsView({ data, openModal, openTaskEditor, setData, notify
 function AnalyticsMetric({ label, value, change, icon, live }: { label: string; value: string; change: string; icon: string; live?: boolean }) { return <div className="card analytics-metric"><div className="analytics-metric-top"><span>{label}</span><Icon name={icon} size={16} /></div><strong>{value}</strong><p className={live ? "muted-cell" : "trend-up"}>{live ? change : `↗ ${change} vs periode lalu`}</p><div className="target">{live ? "Data sinkron provider" : "Semua akun terpilih"}</div></div>; }
 function Recommendation({ title, text, onClick }: { title: string; text: string; onClick: () => void }) { return <div className="recommendation"><div className="recommendation-top"><strong>{title}</strong><PriorityPill priority="Tinggi" /></div><p>{text}</p><button className="button button-soft button-sm" onClick={onClick}>Jadikan tugas ↗</button></div>; }
 
-export function AccountView({ data, identity = { name: "Super Admin", username: "", email: "", whatsapp: "", role: "Super Admin", accessRole: "owner" }, openModal, navigate, notify }: CommonProps) {
+export function AccountView({ data, identity = { name: "Super Admin", username: "", email: "", whatsapp: "", role: "Super Admin", accessRole: "owner" }, openModal, navigate, notify, uploadOwnAvatar }: CommonProps) {
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [avatarError, setAvatarError] = useState("");
+  const avatarInput = useRef<HTMLInputElement>(null);
+  const uploadAvatar = async (file?: File) => {
+    if (!file || uploadingAvatar) return;
+    const validation = validateUserAvatar(file);
+    if (validation) { setAvatarError(validation); return; }
+    const signature = userAvatarExtension(new Uint8Array(await file.slice(0, 12).arrayBuffer()), file.type);
+    if (!signature) { setAvatarError("Isi file tidak sesuai format foto."); return; }
+    if (!uploadOwnAvatar) { setAvatarError("Fitur ubah foto belum tersedia."); return; }
+    setUploadingAvatar(true);
+    setAvatarError("");
+    try {
+      await uploadOwnAvatar(file);
+      notify("Foto profil berhasil diperbarui.");
+    } catch (error) {
+      setAvatarError(error instanceof Error ? error.message : "Foto gagal diunggah.");
+    } finally {
+      setUploadingAvatar(false);
+    }
+  };
   const accessLabel = canManageUsers(identity) ? "Super Admin" : identity.accessRole === "viewer" ? "Viewer" : "Anggota tim";
   return <><PageHeading kicker="Akun / Keamanan" title="Akun & keamanan" description="Informasi akun dan keamanan akses Anda." action={<button className="button button-danger" onClick={() => notify("logout")}><Icon name="log-out" size={15} />Keluar</button>} />
-    <div className="account-grid"><div className="card profile-card"><div className="profile-avatar"><Avatar name={identity.name} src={identity.avatarUrl} /></div><h2>{identity.name}</h2><div className="role">{identity.role}{identity.role !== accessLabel ? ` · ${accessLabel}` : ""}</div><div className="profile-mail">@{identity.username}</div><p className="profile-managed-note">Profil dan foto dikelola oleh Super Admin.</p><div className="profile-stat"><div><strong>{data.campaigns.filter((campaign) => (campaign.lifecycleStatus || "active") === "active").length}</strong><span>Campaign aktif</span></div><div><strong>{data.tasks.filter((task) => task.status === "Done").length}</strong><span>Task selesai</span></div></div><div className="profile-actions"><button className="button button-ghost button-sm" onClick={() => openModal("password")}>Ganti PIN</button></div></div>
+    <div className="account-grid"><div className="card profile-card"><div className="profile-avatar"><Avatar name={identity.name} src={identity.avatarUrl} /></div><button type="button" className="button button-soft button-sm profile-avatar-change" onClick={() => avatarInput.current?.click()} disabled={uploadingAvatar || !uploadOwnAvatar}><Icon name="image" size={13} />{uploadingAvatar ? "Mengunggah…" : "Ganti foto profil"}</button><input ref={avatarInput} type="file" accept="image/png,image/jpeg,image/webp" aria-label="Pilih foto profil baru" hidden disabled={uploadingAvatar} onChange={(event) => { void uploadAvatar(event.target.files?.[0]); event.target.value = ""; }} />{avatarError && <p className="campaign-form-error profile-avatar-error" role="alert">{avatarError}</p>}<h2>{identity.name}</h2><div className="role">{identity.role}{identity.role !== accessLabel ? ` · ${accessLabel}` : ""}</div><div className="profile-mail">@{identity.username}</div><p className="profile-managed-note">Anda dapat mengganti foto sendiri. Data akun lainnya dikelola oleh Super Admin.</p><div className="profile-stat"><div><strong>{data.campaigns.filter((campaign) => (campaign.lifecycleStatus || "active") === "active").length}</strong><span>Campaign aktif</span></div><div><strong>{data.tasks.filter((task) => task.status === "Done").length}</strong><span>Task selesai</span></div></div><div className="profile-actions"><button className="button button-ghost button-sm" onClick={() => openModal("password")}>Ganti PIN</button></div></div>
       <div className="card"><div className="card-header"><div><h2 className="card-title">Akses akun Anda</h2><p className="card-subtitle">{accessLevels.find((level) => level.value === identity.accessRole)?.label || accessLabel}</p></div></div><p className="card-subtitle">{accessLevels.find((level) => level.value === identity.accessRole)?.description}</p>{canManageUsers(identity) && <button className="button button-primary" style={{ marginTop: 18 }} onClick={() => navigate("users")}><Icon name="users" size={14} />Buka Manajemen User</button>}</div></div>
   </>;
 }

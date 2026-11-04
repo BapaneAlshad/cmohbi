@@ -5,7 +5,7 @@ import {
   AlertTriangle, ArrowLeft, ArrowRight, BarChart3, Bell, BookOpen, CalendarDays,
   Check, CheckSquare2, ChevronLeft, ChevronRight, Circle, CircleDollarSign, Clock3,
   Download, Edit3, ExternalLink, Eye, Film, Filter, Handshake, Home, Image as ImageIcon,
-  Archive, ChartNoAxesGantt, Info, Instagram, Layers3, LayoutGrid, LayoutPanelLeft, Link2, LogOut, Menu, MessageSquare,
+  Archive, ChartNoAxesGantt, Info, Instagram, Layers3, LayoutGrid, LayoutPanelLeft, Link2, LockKeyhole, LogOut, Menu, MessageSquare,
   Megaphone, Moon, MoreHorizontal, Paperclip, Pin, PinOff, Plus, Reply, Search, Send, Share2,
   RotateCcw, Sparkles, Star, Sun, Target, Trash2, Users, X, type LucideIcon,
 } from "lucide-react";
@@ -22,7 +22,7 @@ const icons: Record<string, LucideIcon> = {
   panel: LayoutPanelLeft, paperclip: Paperclip, pin: Pin, "pin-off": PinOff, plus: Plus, reply: Reply,
   search: Search, send: Send, share: Share2, sparkles: Sparkles, sun: Sun,
   restore: RotateCcw, target: Target, trash: Trash2, users: Users, wallet: CircleDollarSign, clock: Clock3,
-  grid: LayoutGrid, timeline: ChartNoAxesGantt,
+  grid: LayoutGrid, timeline: ChartNoAxesGantt, lock: LockKeyhole,
 };
 
 export function TaskPriorityStar({ active }: { active: boolean }) {

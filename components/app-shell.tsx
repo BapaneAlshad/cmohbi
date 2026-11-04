@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
-import type { AdminDashboardNote, AppData, CampaignDiscussionNote, CampaignExpense, CampaignExpenseInput, CampaignInfluencerBookingPatch, CampaignInfluencerTheme, CampaignInfluencerThemeInput, CampaignKpiInput, CampaignTimelinePhase, ContentItem, EntityId, Influencer, InfluencerPaymentStatus, InfluencerSchedule, NotificationItem, Task, TaskDraft, TaskPatch, Transaction, User, UserIdentity, ViewName } from "@/lib/types";
+import type { AdminDashboardNote, AppData, CampaignDiscussionNote, CampaignExpense, CampaignExpenseInput, CampaignInfluencerBookingPatch, CampaignInfluencerTheme, CampaignInfluencerThemeInput, CampaignKpiInput, CampaignTimelinePhase, ContentItem, EntityId, Influencer, InfluencerPaymentStatus, InfluencerProfileInput, InfluencerSchedule, NotificationItem, Task, TaskDraft, TaskPatch, Transaction, User, UserIdentity, ViewName } from "@/lib/types";
 import { allowedTaskStatuses, applyStatusRequest, filteredBoardTasks, isTaskManager } from "@/lib/task-workflow";
 import { createTaskRecord, decideTaskStatus as persistStatusDecision, loadTaskBoard, requestTaskStatus } from "@/lib/supabase/task-board-data";
 import { datedPhase, orderedPhases, validateTimeline } from "@/lib/campaign-timeline";
@@ -11,7 +11,8 @@ import { persistTaskPatch, persistCampaignKpi } from "@/lib/supabase/campaign-ov
 import { canCreateCampaignExpense, validateCampaignExpense } from "@/lib/campaign-finance";
 import { persistCampaignExpense } from "@/lib/supabase/campaign-finance-data";
 import { calculateInfluencerPaidAmount, canEditCampaignInfluencers, influencerPaymentStatuses, isInfluencerBookingStatus, nextCampaignInfluencerThemeCode, validateInfluencerContentLink, validateInfluencerScheduleDates } from "@/lib/campaign-influencer";
-import { persistCampaignInfluencerTheme, persistCampaignInfluencerThemeDelete, persistCampaignInfluencerBooking, persistCampaignInfluencerBookingDelete, persistCampaignInfluencerPayment } from "@/lib/supabase/campaign-influencer-data";
+import { persistCampaignInfluencerTheme, persistCampaignInfluencerThemeDelete, persistCampaignInfluencerBooking, persistCampaignInfluencerBookingDelete, persistCampaignInfluencerPayment, persistInfluencerProfile } from "@/lib/supabase/campaign-influencer-data";
+import { influencerProfileError, influencerProfileLegacyFields, normalizeInfluencerUsername } from "@/lib/influencer-profiles";
 import { demoData } from "@/lib/demo-data";
 import { demoLoginAllowed, emptyWorkspaceData } from "@/lib/production-policy";
 import { campaignVersionError, emptyCampaignContent, storedCampaign } from "@/lib/campaign-persistence";
@@ -34,7 +35,9 @@ import { userAvatarExtension, validateUserAvatar } from "@/lib/user-avatar";
 import { deriveNotifications, loadLocalNotifications, saveLocalNotifications, unreadNotifications } from "@/lib/notifications";
 import { NotificationPanel } from "./notifications";
 import { AdminNotesView } from "./admin-notes";
+import { DevelopmentPaywallDialog } from "./development-paywall-dialog";
 import { deleteAdminDashboardNote as persistAdminNoteDelete, persistAdminDashboardNote, persistCampaignMembers, persistCampaignNote, persistCampaignNotePin } from "@/lib/supabase/campaign-dashboard-data";
+import { isDevelopmentMenuLocked } from "@/lib/development-menus";
 
 
 const operationalSnapshot = (value: AppData) => JSON.stringify([value.brands, value.content, value.requests, value.influencers, value.transactions, value.socialInbox]);
@@ -45,9 +48,9 @@ const navigation: Array<{ group?: string; view: ViewName; label: string; icon: s
   { view: "brands", label: "Brand", icon: "book" },
   { view: "todo", label: "To-Do", icon: "check-square", count: "12" },
   { group: "OPERASIONAL", view: "calendar", label: "Kalender Konten", icon: "calendar" },
+  { view: "influencers", label: "Data Influencer", icon: "users" },
   { view: "requests", label: "Request & Ide", icon: "sparkles", count: "3" },
   { view: "partners", label: "Mitra & Keuangan", icon: "handshake" },
-  { view: "influencers", label: "Data Influencer", icon: "users" },
   { view: "analytics", label: "Analitik Sosmed", icon: "chart" },
   { view: "social-hub", label: "Social Hub", icon: "instagram" },
   { group: "AKUN", view: "account", label: "Akun & Keamanan", icon: "users" },
@@ -74,6 +77,7 @@ export function AppShell() {
   const [resetUser, setResetUser] = useState<User | null>(null);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [notificationOpen, setNotificationOpen] = useState(false);
+  const [developmentPaywallOpen, setDevelopmentPaywallOpen] = useState(false);
   const [requestedCampaignId, setRequestedCampaignId] = useState<string | null>(null);
   const [supabase] = useState(() => createSupabaseBrowserClient());
   const hydrated = useRef(false);
@@ -89,11 +93,12 @@ export function AppShell() {
   const authAttempt = useRef(false);
   const campaignWrites = useRef(0);
   const [sessionError, setSessionError] = useState("");
+  const currentView: ViewName = isDevelopmentMenuLocked(view, identity) ? "dashboard" : view;
   const clearSession = useCallback(() => {
     sessionGeneration.current++; hydrated.current = false; autosaveSnapshot.current = null;
     latestTasks.current.clear(); taskQueues.current.clear(); notificationSnapshot.current = null;
     liveContextRef.current = null; setLiveContext(null); setData(emptyWorkspaceData()); setNotifications([]);
-    setModal(null); setEditingTaskId(null); setNotificationOpen(false); setRequestedCampaignId(null);
+    setModal(null); setDevelopmentPaywallOpen(false); setEditingTaskId(null); setNotificationOpen(false); setRequestedCampaignId(null);
     setIdentity({ name: "", username: "", email: "", whatsapp: "", role: "Viewer", accessRole: "viewer" });
     setAuthMode("signed-out");
   }, []);
@@ -103,7 +108,7 @@ export function AppShell() {
     const generation = ++sessionGeneration.current;
     if (liveContextRef.current?.userId !== userId) {
       setAuthMode("loading"); setData(emptyWorkspaceData()); setNotifications([]); setModal(null);
-      setEditingTaskId(null); setRequestedCampaignId(null); setNotificationOpen(false); setView("dashboard");
+      setEditingTaskId(null); setRequestedCampaignId(null); setNotificationOpen(false); setDevelopmentPaywallOpen(false); setView("dashboard");
     }
     const response = await fetch("/api/bootstrap", {
       method: "POST",
@@ -212,7 +217,7 @@ export function AppShell() {
     if (autosaveSnapshot.current === snapshot) return;
     if (autosaveSnapshot.current === null) { autosaveSnapshot.current = snapshot; return; }
     const timer = window.setTimeout(() => {
-      void saveWorkspaceData(supabase, liveContext.workspaceId, liveContext.userId, data)
+      void saveWorkspaceData(supabase, liveContext.workspaceId, liveContext.userId, data, canManageUsers(identity))
         .then(() => { autosaveSnapshot.current = snapshot; })
         .catch((error) => {
           setToast({ message: error instanceof Error ? `Gagal menyimpan: ${error.message}` : "Gagal menyimpan ke Supabase." });
@@ -300,7 +305,22 @@ export function AppShell() {
     setNotifications((current) => current.map((item) => ({ ...item, readAt: item.readAt || readAt })));
     if (authMode === "live" && supabase && liveContext) await supabase.rpc("mark_all_notifications_read", { p_workspace_id: liveContext.workspaceId });
   };
-  const navigate = (target: string) => { if (["users", "admin-notes"].includes(target) && !canManageUsers(identity)) return notify("Menu ini hanya tersedia untuk Super Admin."); setView(target as ViewName); setSidebarOpen(false); window.scrollTo({ top: 0, behavior: "smooth" }); };
+  const navigate = (target: string) => {
+    if (isDevelopmentMenuLocked(target, identity)) {
+      setDevelopmentPaywallOpen(true);
+      setSidebarOpen(false);
+      return;
+    }
+    if (["users", "admin-notes"].includes(target) && !canManageUsers(identity)) return notify("Menu ini hanya tersedia untuk Super Admin.");
+    setView(target as ViewName);
+    setSidebarOpen(false);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+  useEffect(() => {
+    if (!isDevelopmentMenuLocked(view, identity)) return;
+    setView("dashboard");
+    setDevelopmentPaywallOpen(false);
+  }, [view, identity.accessRole]);
   const openResetPin = (user: User) => { if (!canManageUsers(identity)) return; setResetUser(user); setModal("resetPin"); };
   const closeModal = () => { setModal(null); setResetUser(null); };
   const resetPin = async (username: string, pin: string) => {
@@ -407,6 +427,41 @@ export function AppShell() {
       url = result.url;
     }
     if (generation !== sessionGeneration.current) throw new Error("Sesi pengguna berubah. Coba kembali.");
+    return url;
+  };
+  const uploadOwnAvatar = async (file: File) => {
+    const generation = sessionGeneration.current;
+    const userId = identity.id ?? identity.username;
+    const validation = validateUserAvatar(file);
+    if (validation) throw new Error(validation);
+    if (!userAvatarExtension(new Uint8Array(await file.slice(0, 12).arrayBuffer()), file.type)) throw new Error("Isi file tidak sesuai format foto.");
+
+    let url: string;
+    if (authMode === "demo") {
+      url = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result));
+        reader.onerror = () => reject(new Error("Foto gagal dibaca."));
+        reader.readAsDataURL(file);
+      });
+    } else {
+      if (!liveContext || String(liveContext.userId) !== String(identity.id)) throw new Error("Sesi akun tidak cocok dengan workspace aktif.");
+      const token = await getAccessToken();
+      if (!token) throw new Error("Sesi login tidak ditemukan.");
+      const form = new FormData();
+      form.set("workspaceId", liveContext.workspaceId);
+      form.set("file", file);
+      const response = await fetch("/api/auth/profile/avatar", { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: form });
+      const result = await response.json() as { url?: string; error?: string };
+      if (!response.ok || !result.url) throw new Error(result.error || "Foto gagal diunggah.");
+      url = result.url;
+    }
+
+    if (generation !== sessionGeneration.current) throw new Error("Sesi pengguna berubah. Coba kembali.");
+    const next = { ...dataRef.current, users: dataRef.current.users.map((user) => String(user.id || user.username) === String(userId) ? { ...user, avatarUrl: url } : user) };
+    if (authMode === "demo") saveLocalData(next);
+    setData(next);
+    setIdentity((current) => current.username === identity.username ? { ...current, avatarUrl: url } : current);
     return url;
   };
   const refreshData = useCallback(async () => {
@@ -766,11 +821,46 @@ export function AppShell() {
     if (generation !== sessionGeneration.current) throw new Error("Sesi pengguna berubah. Coba kembali.");
     setData((state) => ({ ...state, influencerThemes: state.influencerThemes.filter((item) => String(item.id) !== String(id)), influencerSchedules: state.influencerSchedules.map((item) => String(item.themeId) === String(id) ? { ...item, themeId: null } : item) }));
   };
+  const saveInfluencerProfile = async (input: InfluencerProfileInput, id?: EntityId) => {
+    if (!identity || identity.accessRole === "viewer") throw new Error("Akun baca saja tidak dapat mengubah Data Influencer.");
+    const validation = influencerProfileError(input);
+    if (validation) throw new Error(validation);
+    const existing = id == null ? undefined : dataRef.current.influencers.find((item) => String(item.id) === String(id));
+    if (id != null && !existing) throw new Error("Profil influencer tidak ditemukan.");
+    const generation = sessionGeneration.current;
+    const legacy = influencerProfileLegacyFields(input);
+    let saved: Influencer;
+    if (authMode === "live") {
+      if (!supabase || !liveContext) throw new Error("Koneksi workspace belum tersedia.");
+      saved = await persistInfluencerProfile(supabase, liveContext.workspaceId, input, id);
+    } else {
+      const nextId = id ?? globalThis.crypto.randomUUID();
+      saved = {
+        ...(existing || { engagement: "—", status: "Aktif" }),
+        id: nextId,
+        name: input.name.trim(),
+        platform: legacy.platform as Influencer["platform"],
+        niche: legacy.niche,
+        rate: legacy.rate,
+        followers: legacy.followers,
+        collaborationType: input.collaborationType,
+        niches: [...input.niches],
+        customNiche: input.customNiche.trim(),
+        accounts: input.accounts.map((account) => ({ ...account, id: account.id || globalThis.crypto.randomUUID(), username: normalizeInfluencerUsername(account.username || "") })),
+        rateCards: input.rateCards.map((card) => ({ ...card, id: card.id || globalThis.crypto.randomUUID() })),
+      };
+    }
+    if (generation !== sessionGeneration.current) throw new Error("Sesi pengguna berubah. Coba kembali.");
+    setData((state) => ({ ...state, influencers: existing
+      ? state.influencers.map((item) => String(item.id) === String(saved.id) ? saved : item)
+      : [saved, ...state.influencers.filter((item) => String(item.id) !== String(saved.id))] }));
+    return saved;
+  };
   const saveInfluencerBooking = async (campaignId: EntityId, input: CampaignInfluencerBookingPatch, id?: EntityId) => {
     const current = dataRef.current;
     const campaign = current.campaigns.find((item) => String(item.id) === String(campaignId));
     if (!campaign || !canEditCampaignInfluencers(identity, campaign)) throw new Error("Akun tidak dapat mengedit influencer pada Campaign ini.");
-    if (Object.keys(input).some((key) => !["influencerId", "themeId", "visitDate", "uploadDate", "notes", "status", "contentLink"].includes(key))) throw new Error("Field jadwal tidak valid.");
+    if (Object.keys(input).some((key) => !["influencerId", "accountId", "rateCardId", "agreedRate", "themeId", "visitDate", "uploadDate", "notes", "status", "contentLink"].includes(key))) throw new Error("Field jadwal tidak valid.");
     if (input.status !== undefined && !isInfluencerBookingStatus(input.status)) throw new Error("Status kerja sama tidak valid.");
     const existing = id == null ? undefined : current.influencerSchedules.find((item) => String(item.id) === String(id));
     if (id != null && !existing) throw new Error("Jadwal tidak ditemukan.");
@@ -783,6 +873,27 @@ export function AppShell() {
     const influencer = current.influencers.find((item) => String(item.id ?? item.name) === String(input.influencerId));
     if (!existing && !influencer) throw new Error("Pilih influencer dari Data Influencer.");
     if (existing && input.influencerId !== undefined && String(input.influencerId) !== String(existing.influencerId)) throw new Error("Influencer pada jadwal existing tidak dapat diganti.");
+    let selectedRateCard = existing?.rateCardId ? influencer?.rateCards?.find((card) => String(card.id) === String(existing.rateCardId)) : undefined;
+    let selectedAccount = existing?.usernameSnapshot ? influencer?.accounts?.find((account) => account.username === existing.usernameSnapshot && account.platform === existing.platform) : undefined;
+    let collaborationType = existing?.collaborationType || "Influencer";
+    let bookingRate = existing?.rate ?? influencer?.rate ?? 0;
+    let barterValue = existing?.barterValue ?? 0;
+    if (!existing) {
+      selectedRateCard = influencer?.rateCards?.find((card) => String(card.id) === String(input.rateCardId));
+      if (!selectedRateCard) throw new Error("Pilih paket rate card dari profil influencer.");
+      selectedAccount = input.accountId == null ? undefined : influencer?.accounts?.find((account) => String(account.id) === String(input.accountId));
+      if (!selectedAccount) throw new Error("Pilih akun sosial dari profil influencer.");
+      if (selectedAccount && selectedRateCard.platform !== "Lainnya" && selectedAccount.platform !== selectedRateCard.platform) throw new Error("Platform akun harus sama dengan platform paket.");
+      collaborationType = influencer!.collaborationType || "Influencer";
+      const manager = canManageUsers(identity);
+      if (input.agreedRate !== undefined && !manager) throw new Error("Hanya Super Admin dapat menyesuaikan harga paket.");
+      const agreed = input.agreedRate ?? selectedRateCard.amount;
+      if (!Number.isSafeInteger(agreed) || agreed < 0 || agreed > 999_999_999_999) throw new Error("Harga paket yang disepakati tidak valid.");
+      bookingRate = collaborationType === "Influencer" ? agreed : 0;
+      barterValue = collaborationType === "Barter Endorse" ? agreed : 0;
+    } else if (input.rateCardId !== undefined || input.accountId !== undefined || input.agreedRate !== undefined) {
+      throw new Error("Snapshot paket jadwal lama tidak dapat diganti.");
+    }
     const visitDate = input.visitDate !== undefined ? input.visitDate : existing?.visitDate || null;
     const uploadDate = input.uploadDate !== undefined ? input.uploadDate : existing?.uploadDate === undefined ? existing?.date || null : existing.uploadDate;
     const validation = validateInfluencerScheduleDates(visitDate || "", uploadDate || "");
@@ -802,7 +913,7 @@ export function AppShell() {
       if (!supabase || !liveContext) throw new Error("Koneksi workspace belum tersedia.");
       saved = await persistCampaignInfluencerBooking(supabase, campaign, input, id);
     } else {
-      saved = { ...(existing || { id: globalThis.crypto.randomUUID(), influencer: influencer!.name, influencerId: influencer!.id ?? null, platform: influencer!.platform, rate: influencer!.rate, spent: 0, status: "Terjadwal", paymentStatus: "Belum dibayar", time: "00:00" }), campaignId, campaign: campaign.name, themeId: theme?.id ?? null, themeName: theme?.name, content: theme?.name || existing?.content || "", contentLink, visitDate, uploadDate, date: uploadDate || visitDate || "", notes: input.notes !== undefined ? input.notes : existing?.notes, status: nextStatus };
+      saved = { ...(existing || { id: globalThis.crypto.randomUUID(), influencer: influencer!.name, influencerId: influencer!.id ?? null, platform: (selectedAccount?.platform || (selectedRateCard?.platform === "Lainnya" ? influencer!.platform : selectedRateCard?.platform) || influencer!.platform) as InfluencerSchedule["platform"], spent: 0, status: "Terjadwal", paymentStatus: "Belum dibayar", time: "00:00" }), campaignId, campaign: campaign.name, themeId: theme?.id ?? null, themeName: theme?.name, content: theme?.name || existing?.content || "", contentLink, visitDate, uploadDate, date: uploadDate || visitDate || "", notes: input.notes !== undefined ? input.notes : existing?.notes, status: nextStatus, collaborationType, rateCardId: existing?.rateCardId ?? selectedRateCard?.id ?? null, rateCardNameSnapshot: existing?.rateCardNameSnapshot ?? selectedRateCard?.name, rateCardPlatformSnapshot: existing?.rateCardPlatformSnapshot ?? selectedRateCard?.platform, rateCardDetailsSnapshot: existing?.rateCardDetailsSnapshot ?? selectedRateCard?.details, usernameSnapshot: existing?.usernameSnapshot ?? selectedAccount?.username ?? null, rate: bookingRate, barterValue, spent: existing?.spent ?? 0 };
     }
     if (generation !== sessionGeneration.current) throw new Error("Sesi pengguna berubah. Coba kembali.");
     const statusEvent = authMode !== "live" && existing && existing.status !== saved.status ? {
@@ -840,6 +951,7 @@ export function AppShell() {
     const existing = current.influencerSchedules.find((item) => String(item.id) === String(id));
     const linked = existing?.campaignId != null ? String(existing.campaignId) === String(campaignId) : existing?.campaign === campaign.name;
     if (!existing || !linked) throw new Error("Jadwal tidak ditemukan pada Campaign ini.");
+    if (existing.collaborationType === "Barter Endorse") throw new Error("Booking barter tidak memiliki pembayaran tunai.");
     const calculated = calculateInfluencerPaidAmount(status, existing.rate, amount);
     if (calculated.error || calculated.amount === undefined) throw new Error(calculated.error || "Nominal pembayaran tidak valid.");
     const nextAmount = calculated.amount;
@@ -857,7 +969,7 @@ export function AppShell() {
     return saved;
   };
 
-  const common = { saveCampaign, saveInfluencerTheme, deleteInfluencerTheme, saveInfluencerBooking, deleteInfluencerBooking, setInfluencerBookingPayment, saveCampaignTimeline, saveCampaignMembers, createCampaignDiscussionNote, setCampaignNoteDashboardPin, createCampaignExpense, data, identity, mutateTask, decideTaskStatus, openTaskEditor, refreshTaskBoard, taskBoardError, saveCampaignKpi, openModal, openResetPin, navigate, notify, notifyAction, setData, getAccessToken, refreshData, campaignLifecycleAction, requestedCampaignId, onCampaignOpened: () => setRequestedCampaignId(null), uploadMedia, workspaceId: liveContext?.workspaceId, liveMode: Boolean(supabase && liveContext) };
+  const common = { saveCampaign, saveInfluencerProfile, saveInfluencerTheme, deleteInfluencerTheme, saveInfluencerBooking, deleteInfluencerBooking, setInfluencerBookingPayment, saveCampaignTimeline, saveCampaignMembers, createCampaignDiscussionNote, setCampaignNoteDashboardPin, createCampaignExpense, data, identity, mutateTask, decideTaskStatus, openTaskEditor, refreshTaskBoard, taskBoardError, saveCampaignKpi, openModal, openResetPin, navigate, notify, notifyAction, setData, getAccessToken, refreshData, campaignLifecycleAction, requestedCampaignId, onCampaignOpened: () => setRequestedCampaignId(null), uploadMedia, uploadOwnAvatar, workspaceId: liveContext?.workspaceId, liveMode: Boolean(supabase && liveContext) };
 
   const authenticate = async (action: "login" | "signup", name: string, username: string, email: string, whatsapp: string, pin: string) => {
     const demo = action === "login" && !supabase && demoLoginAllowed()
@@ -902,15 +1014,21 @@ export function AppShell() {
   return <div className="app-shell">
     <aside className={`sidebar ${sidebarOpen ? "open" : ""}`} id="sidebar">
       <div className="brand-wrap"><BrandLogo /><div className="brand-copy"><div className="brand-name">Ngapaya</div><div className="brand-subtitle">Marketing HBI</div></div><button className="icon-button sidebar-collapse" onClick={() => setCollapsed(!collapsed)} aria-label="Ciutkan sidebar"><Icon name="panel" /></button><button className="icon-button close-sidebar" onClick={() => setSidebarOpen(false)} aria-label="Tutup menu"><Icon name="close" /></button></div>
-      <nav className="main-nav" aria-label="Navigasi utama">{navigation.filter((item) => !["users", "admin-notes"].includes(item.view) || canManageUsers(identity)).map((item) => <div key={item.view}>{item.group && <div className={`nav-label ${item.group !== "WORKSPACE" ? "nav-gap" : ""}`}>{item.group}</div>}<button className={`nav-item ${view === item.view ? "active" : ""}`} onClick={() => navigate(item.view)}><Icon className="nav-icon" name={item.icon} size={15} /><span>{item.label}</span>{item.view === "campaigns" ? <span className="nav-count">{data.campaigns.filter((campaign) => (campaign.lifecycleStatus || "active") === "active").length}</span> : item.view === "todo" ? <span className="nav-count">{filteredBoardTasks(data, identity, { brand: "all", pic: "all", campaign: "all" }).length}</span> : item.count && <span className="nav-count">{item.count}</span>}</button></div>)}</nav>
+      <nav className="main-nav" aria-label="Navigasi utama">{navigation.filter((item) => !["users", "admin-notes"].includes(item.view) || canManageUsers(identity)).map((item) => {
+        const locked = isDevelopmentMenuLocked(item.view, identity);
+        return <div key={item.view}>{item.group && <div className={`nav-label ${item.group !== "WORKSPACE" ? "nav-gap" : ""}`}>{item.group}</div>}<button type="button" className={`nav-item ${currentView === item.view ? "active" : ""} ${locked ? "nav-item-locked" : ""}`} onClick={() => navigate(item.view)} aria-label={locked ? `${item.label}. Terkunci, klik untuk membukanya.` : undefined} title={locked ? `${item.label} — Klik untuk Membukanya` : undefined}>
+          {locked ? <><div className="nav-lock-base" aria-hidden="true"><Icon className="nav-icon" name={item.icon} size={15} /><span>{item.label}</span></div><div className="nav-lock-overlay" aria-hidden="true"><Icon name="lock" size={13} /><span>Klik untuk Membukanya</span></div></> : <><Icon className="nav-icon" name={item.icon} size={15} /><span>{item.label}</span>{item.view === "campaigns" ? <span className="nav-count">{data.campaigns.filter((campaign) => (campaign.lifecycleStatus || "active") === "active").length}</span> : item.view === "todo" ? <span className="nav-count">{filteredBoardTasks(data, identity, { brand: "all", pic: "all", campaign: "all" }).length}</span> : item.count && <span className="nav-count">{item.count}</span>}</>}
+        </button></div>;
+      })}</nav>
     </aside>
     <button className={`sidebar-backdrop ${sidebarOpen ? "visible" : ""}`} onClick={() => setSidebarOpen(false)} aria-label="Tutup menu" />
-    <main className="main-area"><header className="topbar"><div className="topbar-left"><button className="icon-button menu-toggle" onClick={() => setSidebarOpen(true)} aria-label="Buka menu"><Icon name="menu" /></button><div className="crumbs"><span>Workspace</span><b>/</b><strong>{titles[view]}</strong></div></div><div className="topbar-actions"><label className="search-box"><Icon name="search" /><input type="search" placeholder="Cari apa saja..." aria-label="Cari di workspace" onKeyDown={(event) => { if (event.key === "Enter") notify(`Pencarian “${event.currentTarget.value}” siap digunakan.`); }} /></label><button className="icon-button theme-button" onClick={() => setTheme(theme === "dark" ? "light" : "dark")} aria-label="Ubah tema"><Icon name={theme === "dark" ? "sun" : "moon"} /></button><div className="notification-anchor"><button className={`icon-button notification-button ${unreadNotifications(notifications).length ? "has-unread" : ""}`} onClick={() => { setNotificationOpen((open) => !open); if (authMode === "live") void refreshNotifications(); }} aria-label={unreadNotifications(notifications).length ? `Notifikasi, ${unreadNotifications(notifications).length} belum dibaca` : "Notifikasi"}><Icon name="bell" /><i aria-hidden="true" /></button>{notificationOpen && <NotificationPanel notifications={notifications} onOpen={(notification) => void markNotificationRead(notification)} onMarkAll={() => void markAllNotificationsRead()} />}</div><button className="top-profile" onClick={() => navigate("account")}><Avatar name={identity.name} src={identity.avatarUrl} /><span className="top-profile-copy"><strong>{identity.name}</strong><small>{identity.role}</small></span><span className="chevron">⌄</span></button></div></header>
-      <div className="page-content">{sessionError && <div className="task-board-error" role="alert">{sessionError}<button type="button" className="button button-soft button-sm" onClick={() => window.location.reload()}>Coba lagi</button></div>}{view === "dashboard" && <DashboardView {...common} />}{view === "campaigns" && <CampaignsView {...common} />}{view === "brands" && <BrandView {...common} />}{view === "todo" && <TodoView {...common} />}{view === "calendar" && <CalendarView {...common} />}{view === "requests" && <RequestsView {...common} />}{view === "partners" && <PartnersView {...common} />}{view === "influencers" && <InfluencersView {...common} />}{view === "analytics" && <AnalyticsView {...common} />}{view === "social-hub" && <SocialHubView {...common} />}{view === "account" && <AccountView {...common} />}{view === "users" && <UserManagementView users={data.users} identity={identity} onSave={saveManagedUser} onResetPin={resetPin} onUploadAvatar={uploadUserAvatar} />}{view === "admin-notes" && <AdminNotesView notes={data.adminDashboardNotes || []} users={data.users} identity={identity} onSave={saveAdminNote} onDelete={deleteAdminNote} />}</div>
+    <main className="main-area"><header className="topbar"><div className="topbar-left"><button className="icon-button menu-toggle" onClick={() => setSidebarOpen(true)} aria-label="Buka menu"><Icon name="menu" /></button><div className="crumbs"><span>Workspace</span><b>/</b><strong>{titles[currentView]}</strong></div></div><div className="topbar-actions"><label className="search-box"><Icon name="search" /><input type="search" placeholder="Cari apa saja..." aria-label="Cari di workspace" onKeyDown={(event) => { if (event.key === "Enter") notify(`Pencarian “${event.currentTarget.value}” siap digunakan.`); }} /></label><button className="icon-button theme-button" onClick={() => setTheme(theme === "dark" ? "light" : "dark")} aria-label="Ubah tema"><Icon name={theme === "dark" ? "sun" : "moon"} /></button><div className="notification-anchor"><button className={`icon-button notification-button ${unreadNotifications(notifications).length ? "has-unread" : ""}`} onClick={() => { setNotificationOpen((open) => !open); if (authMode === "live") void refreshNotifications(); }} aria-label={unreadNotifications(notifications).length ? `Notifikasi, ${unreadNotifications(notifications).length} belum dibaca` : "Notifikasi"}><Icon name="bell" /><i aria-hidden="true" /></button>{notificationOpen && <NotificationPanel notifications={notifications} onOpen={(notification) => void markNotificationRead(notification)} onMarkAll={() => void markAllNotificationsRead()} />}</div><button className="top-profile" onClick={() => navigate("account")}><Avatar name={identity.name} src={identity.avatarUrl} /><span className="top-profile-copy"><strong>{identity.name}</strong><small>{identity.role}</small></span><span className="chevron">⌄</span></button></div></header>
+      <div className="page-content">{sessionError && <div className="task-board-error" role="alert">{sessionError}<button type="button" className="button button-soft button-sm" onClick={() => window.location.reload()}>Coba lagi</button></div>}{currentView === "dashboard" && <DashboardView {...common} />}{currentView === "campaigns" && <CampaignsView {...common} />}{currentView === "brands" && <BrandView {...common} />}{currentView === "todo" && <TodoView {...common} />}{currentView === "calendar" && <CalendarView {...common} />}{currentView === "requests" && <RequestsView {...common} />}{currentView === "partners" && <PartnersView {...common} />}{currentView === "influencers" && <InfluencersView {...common} />}{currentView === "analytics" && <AnalyticsView {...common} />}{currentView === "social-hub" && <SocialHubView {...common} />}{currentView === "account" && <AccountView {...common} />}{currentView === "users" && <UserManagementView users={data.users} identity={identity} onSave={saveManagedUser} onResetPin={resetPin} onUploadAvatar={uploadUserAvatar} />}{currentView === "admin-notes" && <AdminNotesView notes={data.adminDashboardNotes || []} users={data.users} identity={identity} onSave={saveAdminNote} onDelete={deleteAdminNote} />}</div>
     </main>
     <div className={`toast ${toast ? "show" : ""}`} role="status">{toast?.message}{toast?.action && <button type="button" onClick={() => { toast.action?.(); setToast(null); }}>{toast.actionLabel}</button>}</div>
     {modal === "task" && isTaskManager(identity) && <TaskDialog key={`${editingTaskId ?? "new"}-${newTaskCampaignId ?? "none"}`} data={data} task={editingTaskId == null ? null : data.tasks.find((task) => String(task.id) === String(editingTaskId))} initialCampaignId={newTaskCampaignId} onClose={closeModal} onSave={saveTask} />}
     {modal && modal !== "task" && (modal !== "campaign" || isTaskManager(identity)) && <AppModal createCampaignRecord={createCampaignRecord} type={modal} data={data} close={closeModal} identity={identity} notify={notify} resetPin={resetPin} resetUser={resetUser} changePin={changePin} createUser={createUser} setData={setData} onCampaignCreated={(campaignId) => { setRequestedCampaignId(campaignId); setView("campaigns"); }} />}
+    {developmentPaywallOpen && !canManageUsers(identity) && <DevelopmentPaywallDialog onClose={() => setDevelopmentPaywallOpen(false)} />}
   </div>;
 }
 

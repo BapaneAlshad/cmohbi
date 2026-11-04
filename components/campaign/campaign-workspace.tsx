@@ -30,12 +30,12 @@ import {
   CreativeReferenceCard,
   EmptyCampaignState,
   IntegrationNotice,
-  PresentationBadge,
   PromoCard,
   PhaseCard,
 } from "./campaign-primitives";
 
 type Campaign = AppData["campaigns"][number];
+type CampaignWorkspaceInfluencerActions = Omit<CampaignInfluencerActions, "saveInfluencerProfile">;
 type CampaignTab = "overview" | "brief" | "timeline" | "content" | "influencer" | "finance" | "discussion";
 type CampaignDialogType = "info" | "brief" | "promo" | "phase" | "reference" | "influencer-theme" | "influencer-booking";
 
@@ -128,7 +128,7 @@ export function CampaignWorkspace({
   saveCampaignTimeline,
   initialTab = "overview",
   liveMode,
-}: CampaignInfluencerActions & { saveCampaign: SaveCampaign;
+}: CampaignWorkspaceInfluencerActions & { saveCampaign: SaveCampaign;
   openTaskEditor: (id?: EntityId, campaignId?: EntityId) => void;
   mutateTask: (id: EntityId, patch: TaskPatch) => Promise<void>;
   saveCampaignKpi: (id: EntityId, input: CampaignKpiInput, existingId?: string) => Promise<void>;
@@ -165,7 +165,7 @@ function CampaignWorkspaceSkeleton() {
   return <div className="campaign-skeleton" aria-label="Memuat detail campaign"><div className="campaign-skeleton-line wide" /><div className="campaign-skeleton-line short" /><div className="campaign-skeleton-tabs" /><div className="campaign-skeleton-grid"><div /><div /><div /></div></div>;
 }
 
-function CampaignWorkspaceContent({ saveCampaign, saveInfluencerTheme, deleteInfluencerTheme, saveInfluencerBooking, deleteInfluencerBooking, setInfluencerBookingPayment, saveCampaignMembers, createCampaignDiscussionNote, setCampaignNoteDashboardPin, createCampaignExpense, campaign, data, identity, readOnly, onBack, onNavigate, setData, notify, getAccessToken, uploadMedia, workspaceId, onLifecycleAction, mutateTask, saveCampaignKpi, saveCampaignTimeline, initialTab, liveMode, openTaskEditor }: CampaignInfluencerActions & { saveCampaign: SaveCampaign; saveCampaignTimeline: (id: EntityId, phaseMode: boolean, phases: CampaignPhase[], expectedVersion?: number) => Promise<void>; saveCampaignMembers: (campaignId: EntityId, memberIds: EntityId[]) => Promise<void>; createCampaignDiscussionNote: (campaignId: EntityId, body: string, replyTo?: string) => Promise<CampaignDiscussionNote>; setCampaignNoteDashboardPin: (campaignId: EntityId, noteId: string, pinned: boolean) => Promise<void>; createCampaignExpense: (campaignId: EntityId, input: CampaignExpenseInput) => Promise<void>; initialTab: CampaignTab; openTaskEditor: (id?: EntityId, campaignId?: EntityId) => void; mutateTask: (id: EntityId, patch: TaskPatch) => Promise<void>; saveCampaignKpi: (id: EntityId, input: CampaignKpiInput, existingId?: string) => Promise<void>; liveMode?: boolean; campaign: Campaign; data: AppData; identity?: UserIdentity; readOnly: boolean; onBack: () => void; onNavigate: (view: string) => void; setData: React.Dispatch<React.SetStateAction<AppData>>; notify: (message: string) => void; getAccessToken?: () => Promise<string | null>; uploadMedia?: (file: File, bucket?: string, prefix?: string) => Promise<string>; workspaceId?: string; onLifecycleAction?: (action: "archive" | "unarchive" | "trash") => void }) {
+function CampaignWorkspaceContent({ saveCampaign, saveInfluencerTheme, deleteInfluencerTheme, saveInfluencerBooking, deleteInfluencerBooking, setInfluencerBookingPayment, saveCampaignMembers, createCampaignDiscussionNote, setCampaignNoteDashboardPin, createCampaignExpense, campaign, data, identity, readOnly, onBack, onNavigate, setData, notify, getAccessToken, uploadMedia, workspaceId, onLifecycleAction, mutateTask, saveCampaignKpi, saveCampaignTimeline, initialTab, liveMode, openTaskEditor }: CampaignWorkspaceInfluencerActions & { saveCampaign: SaveCampaign; saveCampaignTimeline: (id: EntityId, phaseMode: boolean, phases: CampaignPhase[], expectedVersion?: number) => Promise<void>; saveCampaignMembers: (campaignId: EntityId, memberIds: EntityId[]) => Promise<void>; createCampaignDiscussionNote: (campaignId: EntityId, body: string, replyTo?: string) => Promise<CampaignDiscussionNote>; setCampaignNoteDashboardPin: (campaignId: EntityId, noteId: string, pinned: boolean) => Promise<void>; createCampaignExpense: (campaignId: EntityId, input: CampaignExpenseInput) => Promise<void>; initialTab: CampaignTab; openTaskEditor: (id?: EntityId, campaignId?: EntityId) => void; mutateTask: (id: EntityId, patch: TaskPatch) => Promise<void>; saveCampaignKpi: (id: EntityId, input: CampaignKpiInput, existingId?: string) => Promise<void>; liveMode?: boolean; campaign: Campaign; data: AppData; identity?: UserIdentity; readOnly: boolean; onBack: () => void; onNavigate: (view: string) => void; setData: React.Dispatch<React.SetStateAction<AppData>>; notify: (message: string) => void; getAccessToken?: () => Promise<string | null>; uploadMedia?: (file: File, bucket?: string, prefix?: string) => Promise<string>; workspaceId?: string; onLifecycleAction?: (action: "archive" | "unarchive" | "trash") => void }) {
   const [activeTab, setActiveTab] = useState<CampaignTab>(initialTab);
   const [dialog, setDialog] = useState<CampaignDialogType | null>(null);
   const [editingTheme, setEditingTheme] = useState<CampaignInfluencerTheme | null>(null);
@@ -195,6 +195,13 @@ function CampaignWorkspaceContent({ saveCampaign, saveInfluencerTheme, deleteInf
   const canEditInfluencers = !readOnly && canEditCampaignInfluencers(identity, campaign);
 
   const campaignTasks = useMemo(() => data.tasks.filter((task) => entityKey(task.campaign ?? "") === entityKey(campaign.id) && (isTaskManager(identity) || task.status !== "Backlog")), [campaign.id, data.tasks, identity]);
+  const influencerBookingOptions = useMemo(() => data.influencers.flatMap((influencer) => (influencer.rateCards || []).flatMap((rateCard) => {
+    const accounts = (influencer.accounts || []).filter((account) => rateCard.platform === "Lainnya" || account.platform === rateCard.platform);
+    return accounts.map((account) => ({
+      value: JSON.stringify({ influencerId: String(influencer.id ?? influencer.name), accountId: account?.id ? String(account.id) : null, rateCardId: rateCard.id ? String(rateCard.id) : null }),
+      label: `${influencer.name} · ${rateCard.name} · ${account?.platform || rateCard.platform}${account?.username ? ` @${account.username}` : ""} · ${influencer.collaborationType === "Barter Endorse" ? `Estimasi ${rupiah(rateCard.amount)}` : rupiah(rateCard.amount)}`,
+    }));
+  })), [data.influencers]);
   const campaignNotes = useMemo(() => (data.campaignNotes || []).filter((note) => entityKey(note.campaignId) === entityKey(campaign.id)).sort((a, b) => b.createdAt.localeCompare(a.createdAt)), [campaign.id, data.campaignNotes]);
   const linkedInfluencers = useMemo(() => data.influencerSchedules.filter((item) => item.campaignId != null ? entityKey(item.campaignId) === entityKey(campaign.id) : item.campaign === campaign.name), [campaign.id, campaign.name, data.influencerSchedules]);
   const currentPhase = presentation.phases.find((phase) => phase.id === selectedPhase) || defaultTimelinePhase(presentation.phases, today);
@@ -387,7 +394,11 @@ function CampaignWorkspaceContent({ saveCampaign, saveInfluencerTheme, deleteInf
           const theme = await saveInfluencerTheme(campaign.id, { name: value("name"), phase: value("phase"), objective: value("objective"), requiredContent: value("requiredContent"), cta: value("cta") }, editingTheme?.id);
           notify(editingTheme ? "Tema konten diperbarui." : `Tema ${theme.code} ditambahkan.`);
         } else {
-          await saveInfluencerBooking(campaign.id, { influencerId: value("influencerId"), themeId: value("themeId"), visitDate: value("visitDate") || null, uploadDate: value("uploadDate") || null });
+          let selected: { influencerId: string; accountId: string | null; rateCardId: string | null };
+          try { selected = JSON.parse(value("bookingChoice")) as typeof selected; }
+          catch { throw new Error("Pilih influencer dan paket rate card."); }
+          const agreedRateRaw = value("agreedRate");
+          await saveInfluencerBooking(campaign.id, { ...selected, agreedRate: agreedRateRaw === "" ? undefined : Number(agreedRateRaw), themeId: value("themeId"), visitDate: value("visitDate") || null, uploadDate: value("uploadDate") || null });
           notify("Jadwal influencer berhasil disimpan.");
         }
         setDialog(null);
@@ -531,7 +542,7 @@ function CampaignWorkspaceContent({ saveCampaign, saveInfluencerTheme, deleteInf
 
     <div className="campaign-tab-panel" role="tabpanel" id="campaign-tab-panel" aria-labelledby={`campaign-tab-${activeTab}`}>{tabContent[activeTab]}</div>
 
-    {dialog && <CampaignDialog key={`${dialog}-${editingPhase?.id || editingPromo?.id || "new"}`} editingPhase={editingPhase} editingPromo={editingPromo} pending={dialogPending} type={dialog} campaign={campaign} data={data} presentation={presentation} editingTheme={editingTheme} campaignMemberIds={campaignMemberSelection(data, campaign)} error={dialogError} onClose={closeDialog} onSubmit={submitDialog} onUploadImage={dialog === "reference" ? uploadReferenceImage : undefined} onUploadCampaignAvatar={dialog === "info" ? uploadCampaignAvatar : undefined} />}
+    {dialog && <CampaignDialog key={`${dialog}-${editingPhase?.id || editingPromo?.id || "new"}`} editingPhase={editingPhase} editingPromo={editingPromo} pending={dialogPending} type={dialog} campaign={campaign} data={data} presentation={presentation} editingTheme={editingTheme} campaignMemberIds={campaignMemberSelection(data, campaign)} influencerBookingOptions={influencerBookingOptions} canManage={canManage} error={dialogError} onClose={closeDialog} onSubmit={submitDialog} onUploadImage={dialog === "reference" ? uploadReferenceImage : undefined} onUploadCampaignAvatar={dialog === "info" ? uploadCampaignAvatar : undefined} />}
   </div>;
 }
 
@@ -772,7 +783,7 @@ function PersistedDiscussionTab({ campaign, notes, identity, replyTo, canEdit, c
   </div>;
 }
 
-function CampaignDialog({ editingPhase, editingPromo, pending = false, type, campaign, data, presentation, editingTheme, campaignMemberIds, error, onClose, onSubmit, onUploadImage, onUploadCampaignAvatar }: { editingPhase?: CampaignPhase | null; editingPromo?: CampaignPromo | null; pending?: boolean; type: CampaignDialogType; campaign: Campaign; data: AppData; presentation: PresentationState; editingTheme: CampaignInfluencerTheme | null; campaignMemberIds: string[]; error: string; onClose: () => void; onSubmit: (event: FormEvent<HTMLFormElement>) => void; onUploadImage?: (file: File) => Promise<string>; onUploadCampaignAvatar?: (file: File) => Promise<string> }) {
+function CampaignDialog({ editingPhase, editingPromo, pending = false, type, campaign, data, presentation, editingTheme, campaignMemberIds, influencerBookingOptions, canManage, error, onClose, onSubmit, onUploadImage, onUploadCampaignAvatar }: { editingPhase?: CampaignPhase | null; editingPromo?: CampaignPromo | null; pending?: boolean; type: CampaignDialogType; campaign: Campaign; data: AppData; presentation: PresentationState; editingTheme: CampaignInfluencerTheme | null; campaignMemberIds: string[]; influencerBookingOptions: Array<{ value: string; label: string }>; canManage: boolean; error: string; onClose: () => void; onSubmit: (event: FormEvent<HTMLFormElement>) => void; onUploadImage?: (file: File) => Promise<string>; onUploadCampaignAvatar?: (file: File) => Promise<string> }) {
   const dialogRef = useRef<HTMLElement>(null);
   const closeRef = useRef(onClose); closeRef.current = onClose;
   const blockedRef = useRef(false);
@@ -891,7 +902,7 @@ function CampaignDialog({ editingPhase, editingPromo, pending = false, type, cam
           {referenceUploadError && <small role="alert">{referenceUploadError}</small>}
         </label>}
         {type === "influencer-theme" && <><div className="two-fields"><Field label="Kode tema" name="themeCodePreview" readOnly defaultValue={editingTheme?.code || nextCampaignInfluencerThemeCode(data.influencerThemes, campaign.id)} /><Field label="Nama tema" name="name" required defaultValue={editingTheme?.name} placeholder="Contoh: Menu Baru" /></div><div className="two-fields"><div className="form-field"><label htmlFor="campaign-field-phase">Fase</label><select id="campaign-field-phase" className="modal-input" name="phase" defaultValue={editingTheme?.phase || ""}><option value="">Tanpa fase</option>{hasLegacyThemePhase && <option value={editingTheme!.phase}>Fase tersimpan: {editingTheme!.phase}</option>}{campaignPhaseNames.map((phase) => <option value={phase} key={phase}>{phase}</option>)}</select></div><Field label="Tujuan" name="objective" defaultValue={editingTheme?.objective} placeholder="Contoh: Alasan datang" /></div>{campaignPhaseNames.length === 0 && <div className="campaign-form-hint">Campaign ini belum memiliki fase. Tema tetap bisa dibuat tanpa fase; tambahkan fase dari tab Timeline &amp; Tugas jika diperlukan.</div>}<TextArea label="Isi wajib" name="requiredContent" defaultValue={editingTheme?.requiredContent} placeholder="Detail yang wajib disampaikan atau ditampilkan" /><TextArea label="CTA" name="cta" defaultValue={editingTheme?.cta} placeholder="Contoh: Tag teman" /></>}
-        {type === "influencer-booking" && <><Select label="Influencer" name="influencerId" values={data.influencers.map((item) => String(item.id ?? item.name))} labels={data.influencers.map((item) => `${item.name} · ${item.platform}`)} required /><Select label="Tema konten" name="themeId" values={campaignInfluencerThemesForCampaign(data.influencerThemes, campaign.id).map((item) => String(item.id))} labels={campaignInfluencerThemesForCampaign(data.influencerThemes, campaign.id).map((item) => `${item.code} · ${item.name}`)} required /><div className="two-fields"><Field label="Tanggal visit" name="visitDate" type="date" /><Field label="Tanggal upload" name="uploadDate" type="date" /></div><div className="campaign-form-hint">Rate awal menggunakan rate card master influencer. Spent dimulai dari Rp0 dan status pembayaran Belum dibayar.</div></>}
+        {type === "influencer-booking" && <><Select label="Influencer · akun · paket" name="bookingChoice" values={influencerBookingOptions.map((item) => item.value)} labels={influencerBookingOptions.map((item) => item.label)} required /><Select label="Tema konten" name="themeId" values={campaignInfluencerThemesForCampaign(data.influencerThemes, campaign.id).map((item) => String(item.id))} labels={campaignInfluencerThemesForCampaign(data.influencerThemes, campaign.id).map((item) => `${item.code} · ${item.name}`)} required /><div className="two-fields"><Field label="Tanggal visit" name="visitDate" type="date" /><Field label="Tanggal upload" name="uploadDate" type="date" /></div>{canManage && <Field label="Harga / estimasi yang disepakati (opsional)" name="agreedRate" type="number" min="0" max="999999999999" step="1" placeholder="Kosongkan untuk memakai nilai paket" />}<div className="campaign-form-hint">Harga paket tersimpan sebagai snapshot. Untuk Barter Endorse nilainya menjadi estimasi dan tidak masuk pengeluaran; untuk Influencer, spent hanya bertambah saat pembayaran dicatat.</div></>}
         {error && <div className="campaign-form-error" role="alert"><Icon name="alert" size={14} />{error}</div>}
         <div className="modal-actions"><button type="button" className="button button-ghost" onClick={onClose} disabled={uploadingAvatar || uploadingReference || pending}>Batal</button><button type="submit" className="button button-primary" disabled={uploadingAvatar || uploadingReference || pending}>{uploadingAvatar ? "Mengunggah foto…" : uploadingReference ? "Mengunggah gambar…" : pending ? "Menyimpan…" : type === "reference" ? "Simpan gambar" : "Simpan perubahan"}</button></div>
       </form>

@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { AppData, Campaign, CampaignTimelinePhase, Task, UserIdentity } from "@/lib/types";
 import { Avatar, Icon, TaskPriorityStar, rupiah, StatusPill } from "@/components/ui";
 import { allowedTaskStatuses, isTaskManager, taskIsPriority, taskStatuses } from "@/lib/task-workflow";
@@ -52,7 +52,7 @@ export function BudgetProgress({ budget, spent, compact = false }: { budget: num
 export type CampaignPromo = { id: string; title: string; period: string; startDate?: string; endDate?: string; summary?: string; detail: string; status: string };
 
 export function PromoCard({ promo, canEdit = false, onEdit, onDelete }: { promo: CampaignPromo; canEdit?: boolean; onEdit?: () => void; onDelete?: () => void }) {
-  return <article className="campaign-promo-card"><div className="campaign-card-row"><StatusPill status={promo.status} /><span>{promo.startDate || promo.endDate ? formatCampaignPeriod(promo.startDate, promo.endDate) : formatDisplayDateRange(promo.period)}</span>{canEdit && <div className="campaign-promo-actions"><button type="button" className="icon-button" onClick={onEdit} aria-label={`Edit promo ${promo.title}`} title="Edit promo"><Icon name="edit" size={13} /></button><button type="button" className="icon-button danger" onClick={onDelete} aria-label={`Hapus promo ${promo.title}`} title="Hapus promo"><Icon name="trash" size={13} /></button></div>}</div><h3>{promo.title}</h3>{promo.summary && <p>{promo.summary}</p>}<div className="campaign-promo-detail">{promo.detail}</div></article>;
+  return <article className="campaign-promo-card"><div className="campaign-promo-heading"><h3>{promo.title}</h3>{canEdit && <div className="campaign-promo-actions"><button type="button" className="icon-button" onClick={onEdit} aria-label={`Edit promo ${promo.title}`} title="Edit promo"><Icon name="edit" size={13} /></button><button type="button" className="icon-button danger" onClick={onDelete} aria-label={`Hapus promo ${promo.title}`} title="Hapus promo"><Icon name="trash" size={13} /></button></div>}</div><div className="campaign-promo-meta"><StatusPill status={promo.status} /><span>{promo.startDate || promo.endDate ? formatCampaignPeriod(promo.startDate, promo.endDate) : formatDisplayDateRange(promo.period)}</span></div>{promo.summary && <p>{promo.summary}</p>}<div className="campaign-promo-detail">{promo.detail}</div></article>;
 }
 
 export type CampaignPhase = CampaignTimelinePhase;
@@ -83,12 +83,50 @@ export type CreativeReference = { id: string; title: string; url: string; kind: 
 
 export function CreativeReferenceCard({ reference, onDelete }: { reference: CreativeReference; onDelete?: () => void }) {
   const [imageFailed, setImageFailed] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const previewButtonRef = useRef<HTMLButtonElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
   const isImage = reference.kind === "Gambar" || reference.mimeType?.startsWith("image/");
-  return <article className="campaign-reference-card"><a className="campaign-reference-link" href={reference.url} target="_blank" rel="noreferrer"><span className="campaign-reference-preview">{isImage && !imageFailed ? <img src={reference.url} alt={reference.title} loading="lazy" onError={() => setImageFailed(true)} /> : <Icon name={isImage ? "image" : "link"} size={24} />}</span><strong>{reference.title}</strong><small>{reference.kind} · {reference.startDate && reference.endDate ? `${formatCampaignPeriod(reference.startDate, reference.endDate)} · ` : ""}Buka referensi <Icon name="external" size={10} /></small>{reference.source !== "backend" && <PresentationBadge />}</a>{onDelete && <button type="button" className="button button-ghost button-sm campaign-reference-delete" onClick={onDelete} aria-label={`Hapus ${reference.title}`}><Icon name="trash" size={12} />Hapus gambar</button>}</article>;
+
+  useEffect(() => {
+    if (!previewOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    closeButtonRef.current?.focus();
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setPreviewOpen(false);
+      if (event.key === "Tab") {
+        event.preventDefault();
+        closeButtonRef.current?.focus();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", handleKeyDown);
+      previewButtonRef.current?.focus();
+    };
+  }, [previewOpen]);
+
+  return <>
+    <article className="campaign-reference-card">
+      {isImage ? <button ref={previewButtonRef} type="button" className="campaign-reference-preview" onClick={() => !imageFailed && setPreviewOpen(true)} disabled={imageFailed} aria-label="Lihat gambar referensi">
+        {!imageFailed ? <img src={reference.url} alt="Gambar referensi" loading="lazy" onError={() => setImageFailed(true)} /> : <Icon name="image" size={24} />}
+      </button> : <a className="campaign-reference-preview campaign-reference-link" href={reference.url} target="_blank" rel="noreferrer" aria-label="Buka referensi"><Icon name="link" size={24} /></a>}
+      {onDelete && <button type="button" className="button button-ghost button-sm campaign-reference-delete" onClick={onDelete} aria-label="Hapus gambar referensi"><Icon name="trash" size={12} />Hapus</button>}
+    </article>
+    {previewOpen && <div className="campaign-reference-lightbox-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setPreviewOpen(false); }}>
+      <section className="campaign-reference-lightbox" role="dialog" aria-modal="true" aria-label="Pratinjau gambar referensi">
+        <button ref={closeButtonRef} type="button" className="campaign-reference-lightbox-close" onClick={() => setPreviewOpen(false)} aria-label="Tutup gambar"><Icon name="close" size={20} /></button>
+        <img src={reference.url} alt="Gambar referensi ukuran penuh" />
+      </section>
+    </div>}
+  </>;
 }
 
 export function InfluencerBriefCard({ item }: { item: AppData["influencerSchedules"][number] }) {
-  return <article className="campaign-content-card"><div className="campaign-content-icon influencer"><Icon name="users" size={18} /></div><div className="campaign-content-copy"><div className="campaign-card-row"><strong>{item.themeName || item.content}</strong><StatusPill status={displayInfluencerBookingStatus(item.status)} className={`campaign-influencer-status-pill cooperation-${influencerBookingStatusTone(item.status)}`} /></div><p>{item.platform} · {item.influencer} · Visit {formatDisplayDate(item.visitDate, { empty: "belum diatur" })} · Upload {formatDisplayDate(item.uploadDate === undefined ? item.date : item.uploadDate, { empty: "belum diatur" })}</p><div className="campaign-content-details"><span><b>Rate / spent</b>{rupiah(item.rate)} / {rupiah(item.spent)}</span><span><b>Pembayaran</b><StatusPill status={displayInfluencerPaymentStatus(item.paymentStatus)} className={`campaign-influencer-status-pill payment-${influencerPaymentStatusTone(item.paymentStatus)}`} /></span>{item.notes && <span><b>Catatan</b>{item.notes}</span>}</div><small>Sumber: booking influencer yang terhubung ke campaign</small></div></article>;
+  const barter = item.collaborationType === "Barter Endorse";
+  return <article className="campaign-content-card"><div className="campaign-content-icon influencer"><Icon name="users" size={18} /></div><div className="campaign-content-copy"><div className="campaign-card-row"><strong>{item.themeName || item.content}</strong><StatusPill status={displayInfluencerBookingStatus(item.status)} className={`campaign-influencer-status-pill cooperation-${influencerBookingStatusTone(item.status)}`} /></div><p>{item.platform} · {item.influencer} · Visit {formatDisplayDate(item.visitDate, { empty: "belum diatur" })} · Upload {formatDisplayDate(item.uploadDate === undefined ? item.date : item.uploadDate, { empty: "belum diatur" })}</p><div className="campaign-content-details"><span><b>{barter ? "Estimasi barter" : "Rate / spent"}</b>{barter ? rupiah(item.barterValue ?? 0) : `${rupiah(item.rate)} / ${rupiah(item.spent)}`}{item.rateCardNameSnapshot && <small>{item.rateCardNameSnapshot}{item.rateCardDetailsSnapshot ? ` · ${item.rateCardDetailsSnapshot}` : ""}</small>}</span><span><b>Pembayaran</b>{barter ? <strong>Tidak berlaku</strong> : <StatusPill status={displayInfluencerPaymentStatus(item.paymentStatus)} className={`campaign-influencer-status-pill payment-${influencerPaymentStatusTone(item.paymentStatus)}`} />}</span>{item.notes && <span><b>Catatan</b>{item.notes}</span>}</div><small>Sumber: booking influencer yang terhubung ke campaign</small></div></article>;
 }
 
 export type CampaignNoteItem = { id: string; author: string; body: string; createdAt: string; pinned: boolean; replyTo?: string };

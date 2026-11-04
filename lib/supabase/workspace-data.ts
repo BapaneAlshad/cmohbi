@@ -28,6 +28,20 @@ function isMissingBookingsTable(error: { code?: string; message?: string } | nul
   return error?.code === "42P01" || error?.message?.includes("influencer_bookings");
 }
 
+function isMissingInfluencerProfileTable(error: { code?: string; message?: string } | null, table: string) {
+  const message = error?.message?.toLowerCase() ?? "";
+  return error?.code === "42P01" || error?.code === "PGRST205"
+    || (message.includes(table) && (message.includes("does not exist") || message.includes("schema cache") || message.includes("could not find the table")));
+}
+
+function parseFollowerCount(value: string | null | undefined) {
+  const normalized = String(value || "").trim().toLowerCase().replace(",", ".");
+  const match = normalized.match(/^([0-9]+(?:\.[0-9]+)?)\s*([km])?$/);
+  if (!match) return Number.parseInt(normalized.replace(/\D/g, ""), 10) || 0;
+  const multiplier = match[2] === "m" ? 1_000_000 : match[2] === "k" ? 1_000 : 1;
+  return Math.round(Number(match[1]) * multiplier);
+}
+
 function isMissingCampaignThemesTable(error: { code?: string; message?: string } | null) {
   const message = error?.message?.toLowerCase() ?? "";
   return error?.code === "42P01" || error?.code === "PGRST205"
@@ -116,7 +130,7 @@ export async function loadWorkspaceData(
   currentUserEmail: string,
 ): Promise<AppData> {
   fallback = emptyWorkspaceData();
-  const [campaignResult, taskResult, memberResult, bookingResult, themeResult, accountResult, metricResult, postResult, inboxResult, requestResult, influencerResult, transactionResult, brandResult, brandMenuResult, notificationResult, campaignMembersResult, campaignNotesResult, adminNotesResult, adminNoteRecipientsResult, campaignExpenseResult] = await Promise.all([
+  const [campaignResult, taskResult, memberResult, bookingResult, themeResult, accountResult, metricResult, postResult, inboxResult, requestResult, influencerResult, influencerSocialAccountResult, influencerRateCardResult, transactionResult, brandResult, brandMenuResult, notificationResult, campaignMembersResult, campaignNotesResult, adminNotesResult, adminNoteRecipientsResult, campaignExpenseResult] = await Promise.all([
     client.from("campaigns").select("*,campaign_members(user_id)").eq("workspace_id", workspaceId).order("created_at", { ascending: false }),
     client.from("tasks").select("*").eq("workspace_id", workspaceId).order("created_at", { ascending: true }),
     client.from("workspace_members").select("user_id, role").eq("workspace_id", workspaceId),
@@ -128,6 +142,8 @@ export async function loadWorkspaceData(
     client.from("social_inbox").select("*").eq("workspace_id", workspaceId).order("occurred_at", { ascending: false }),
     client.from("marketing_requests").select("*").eq("workspace_id", workspaceId).order("request_date", { ascending: false }),
     client.from("marketing_influencers").select("*").eq("workspace_id", workspaceId).order("created_at", { ascending: false }),
+    client.from("marketing_influencer_accounts").select("*").eq("workspace_id", workspaceId).order("platform", { ascending: true }),
+    client.from("marketing_influencer_rate_cards").select("*").eq("workspace_id", workspaceId).order("position", { ascending: true }).order("created_at", { ascending: true }),
     client.from("marketing_transactions").select("*").eq("workspace_id", workspaceId).order("transaction_date", { ascending: false }),
     client.from("brands").select("*").eq("workspace_id", workspaceId).order("name", { ascending: true }),
     client.from("brand_menus").select("*").eq("workspace_id", workspaceId).order("name", { ascending: true }),
@@ -154,6 +170,9 @@ export async function loadWorkspaceData(
     : { data: [], error: null };
 
   if (profileResult.error) throw profileResult.error;
+  for (const [result, table] of [[influencerSocialAccountResult, "marketing_influencer_accounts"], [influencerRateCardResult, "marketing_influencer_rate_cards"]] as const) {
+    if (result.error && !isMissingInfluencerProfileTable(result.error, table)) throw result.error;
+  }
   for (const result of [campaignMembersResult, campaignNotesResult, adminNotesResult, adminNoteRecipientsResult]) {
     if (result.error && !isMissingDashboardNotes(result.error)) throw result.error;
   }
@@ -256,16 +275,48 @@ export async function loadWorkspaceData(
     pic: profileById.get(request.pic_id)?.full_name,
     icon: request.icon || "✦",
   }));
-  const influencers = influencerResult.error ? fallback.influencers : (influencerResult.data ?? []).map((influencer) => ({
-    id: influencer.id,
-    name: influencer.name,
-    platform: (influencer.platform === "facebook" ? "Facebook" : influencer.platform === "tiktok" ? "TikTok" : "Instagram") as AppData["influencers"][number]["platform"],
-    niche: influencer.niche || "Belum diisi",
-    rate: Number(influencer.rate),
-    followers: influencer.followers || "—",
-    engagement: influencer.engagement || "—",
-    status: influencer.status || "Review",
-  }));
+  const influencerAccountRows = influencerSocialAccountResult.error ? [] : influencerSocialAccountResult.data ?? [];
+  const influencerRateCardRows = influencerRateCardResult.error ? [] : influencerRateCardResult.data ?? [];
+  const influencerAccountsById = new Map<string, typeof influencerAccountRows>();
+  for (const account of influencerAccountRows) influencerAccountsById.set(account.influencer_id, [...(influencerAccountsById.get(account.influencer_id) ?? []), account]);
+  const influencerRateCardsById = new Map<string, typeof influencerRateCardRows>();
+  for (const card of influencerRateCardRows) influencerRateCardsById.set(card.influencer_id, [...(influencerRateCardsById.get(card.influencer_id) ?? []), card]);
+  const influencers = influencerResult.error ? fallback.influencers.filter((influencer) => influencer.platform !== "Facebook") : (influencerResult.data ?? [])
+    .filter((influencer) => String(influencer.platform).toLowerCase() !== "facebook")
+    .map((influencer) => {
+      const legacyPlatform = String(influencer.platform).toLowerCase() === "tiktok" ? "TikTok" as const : "Instagram" as const;
+      const persistedAccounts = influencerAccountsById.get(influencer.id) ?? [];
+      const accounts = persistedAccounts.length ? persistedAccounts.map((account) => ({
+        id: account.id,
+        platform: account.platform === "TikTok" ? "TikTok" as const : "Instagram" as const,
+        username: account.username || null,
+        followers: Number(account.followers || 0),
+      })) : [{ platform: legacyPlatform, username: null, followers: parseFollowerCount(influencer.followers) }];
+      const persistedRateCards = influencerRateCardsById.get(influencer.id) ?? [];
+      const rateCards = persistedRateCards.length ? persistedRateCards.map((card) => ({
+        id: card.id,
+        name: String(card.name),
+        platform: card.platform === "TikTok" ? "TikTok" as const : card.platform === "Lainnya" ? "Lainnya" as const : "Instagram" as const,
+        details: String(card.details || ""),
+        amount: Number(card.amount || 0),
+      })) : [{ name: "Paket awal", platform: legacyPlatform, details: "Rate card lama", amount: Number(influencer.rate || 0) }];
+      const niches = Array.isArray(influencer.niches) ? influencer.niches.map(String) : [];
+      return {
+        id: influencer.id,
+        name: influencer.name,
+        platform: legacyPlatform,
+        niche: influencer.niche || "Belum diisi",
+        rate: Number(influencer.rate),
+        followers: influencer.followers || "—",
+        engagement: influencer.engagement || "—",
+        status: influencer.status || "Review",
+        collaborationType: influencer.collaboration_type === "Barter Endorse" ? "Barter Endorse" as const : "Influencer" as const,
+        niches,
+        customNiche: influencer.custom_niche || "",
+        accounts,
+        rateCards,
+      };
+    });
   const transactions = transactionResult.error ? fallback.transactions : (transactionResult.data ?? []).map((transaction) => ({
     id: transaction.id,
     category: transaction.category,
@@ -372,6 +423,13 @@ export async function loadWorkspaceData(
         influencer: booking.influencer_name,
         influencerId: booking.influencer_id === undefined ? undefined : booking.influencer_id || null,
         platform: booking.platform === "instagram" ? "Instagram" : booking.platform === "facebook" ? "Facebook" : "TikTok",
+        usernameSnapshot: booking.username_snapshot === undefined ? undefined : booking.username_snapshot || null,
+        collaborationType: booking.collaboration_type === "Barter Endorse" ? "Barter Endorse" : "Influencer",
+        rateCardId: booking.rate_card_id === undefined ? undefined : booking.rate_card_id || null,
+        rateCardNameSnapshot: booking.rate_card_name_snapshot || undefined,
+        rateCardPlatformSnapshot: booking.rate_card_platform_snapshot || undefined,
+        rateCardDetailsSnapshot: booking.rate_card_details_snapshot || undefined,
+        barterValue: Number(booking.barter_value || 0),
         campaign: campaignById.get(booking.campaign_id)?.name ?? "Tanpa campaign",
         campaignId: booking.campaign_id || null,
         themeId: booking.campaign_influencer_theme_id === undefined ? undefined : booking.campaign_influencer_theme_id || null,
@@ -424,6 +482,7 @@ export async function saveWorkspaceData(
   workspaceId: string,
   userId: string,
   data: AppData,
+  canWriteBrands = true,
 ) {
   const [existingRequestResult, existingBrandResult, existingBrandMenuResult] = await Promise.all([
     client.from("marketing_requests").select("id, pic_id").eq("workspace_id", workspaceId),
@@ -436,7 +495,8 @@ export async function saveWorkspaceData(
 
   const existingRequestById = new Map((existingRequestResult.data ?? []).map((request) => [request.id, request]));
   const brandIdByName = new Map((data.brands || []).map((brand) => [brand.name, brand.id]));
-  const brandPersistenceAvailable = !existingBrandResult.error && !existingBrandMenuResult.error;
+  const brandSchemaAvailable = !existingBrandResult.error && !existingBrandMenuResult.error;
+  const brandPersistenceAvailable = brandSchemaAvailable && canWriteBrands;
   // Campaign influencer themes/bookings use explicit transactional saves for all roles.
   // Bulk autosave must not overwrite newer edits made by another team member.
 
@@ -504,7 +564,7 @@ export async function saveWorkspaceData(
       transaction_type: transaction.type,
       status: transaction.status,
       brand: transaction.brand,
-      ...(brandPersistenceAvailable ? { brand_id: brandIdByName.get(transaction.brand) || transaction.brandId || null } : {}),
+      ...(brandSchemaAvailable ? { brand_id: brandIdByName.get(transaction.brand) || transaction.brandId || null } : {}),
       updated_at: new Date().toISOString(),
     }));
   const brands = (data.brands || []).filter((brand) => isUuid(brand.id)).map((brand) => ({

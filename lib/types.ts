@@ -23,14 +23,20 @@ export interface TaskStatusRequest { id: string; fromStatus: TaskStatus; toStatu
 export interface TaskDraft { title: string; brand: string; campaign: EntityId | null; assigneeIds: EntityId[]; dueDate: string; isPriority: boolean; status: TaskStatus; contentCalendarType: "feed_carousel" | "reels" | null; phaseId?: string }
 export interface ContentItem { id: number | string; title: string; date: number; status: string; brand: string; platform: "Instagram" | "Facebook" | "Threads" | "TikTok"; caption?: string; mediaUrl?: string; mediaType?: "feed" | "reel" | "video"; scheduledAt?: string }
 export interface RequestItem { id: EntityId; title: string; sender: string; date: string; brand: string; priority: string; status: string; pic?: string; icon: string }
-export interface Influencer { id?: EntityId; name: string; platform: "Instagram" | "Facebook" | "TikTok"; niche: string; rate: number; followers: string; engagement: string; status: string }
+export type InfluencerCollaborationType = "Influencer" | "Barter Endorse";
+export type InfluencerAccountPlatform = "Instagram" | "TikTok";
+export interface InfluencerSocialAccount { id?: EntityId; platform: InfluencerAccountPlatform; username?: string | null; followers: number }
+export interface InfluencerRateCard { id?: EntityId; name: string; platform: InfluencerAccountPlatform | "Lainnya"; details: string; amount: number }
+export interface InfluencerProfileInput { name: string; collaborationType: InfluencerCollaborationType; niches: string[]; customNiche: string; accounts: InfluencerSocialAccount[]; rateCards: InfluencerRateCard[] }
+export interface Influencer { id?: EntityId; name: string; platform: "Instagram" | "Facebook" | "TikTok"; niche: string; rate: number; followers: string; engagement: string; status: string; collaborationType?: InfluencerCollaborationType; niches?: string[]; customNiche?: string; accounts?: InfluencerSocialAccount[]; rateCards?: InfluencerRateCard[] }
 export interface CampaignInfluencerTheme { id: EntityId; campaignId: EntityId; code: string; name: string; phase: string; objective: string; requiredContent: string; cta: string }
-export interface InfluencerSchedule { id: EntityId; influencer: string; influencerId?: EntityId | null; platform: "Instagram" | "Facebook" | "TikTok"; campaign: string; campaignId?: EntityId | null; themeId?: EntityId | null; themeName?: string; visitDate?: string | null; uploadDate?: string | null; content: string; contentLink?: string | null; date: string; time: string; status: string; rate: number; spent: number; paymentStatus: string; notes?: string }
+export interface InfluencerSchedule { id: EntityId; influencer: string; influencerId?: EntityId | null; platform: "Instagram" | "Facebook" | "TikTok"; usernameSnapshot?: string | null; collaborationType?: InfluencerCollaborationType; rateCardId?: EntityId | null; rateCardNameSnapshot?: string | null; rateCardPlatformSnapshot?: string | null; rateCardDetailsSnapshot?: string | null; barterValue?: number; campaign: string; campaignId?: EntityId | null; themeId?: EntityId | null; themeName?: string; visitDate?: string | null; uploadDate?: string | null; content: string; contentLink?: string | null; date: string; time: string; status: string; rate: number; spent: number; paymentStatus: string; notes?: string }
 export type InfluencerBookingStatus = "Menunggu konfirmasi" | "Terjadwal" | "Sudah visit" | "Revisi" | "Selesai" | "Dibatalkan";
 export type InfluencerPaymentStatus = "Belum dibayar" | "DP dibayar" | "Lunas";
 export type CampaignInfluencerThemeInput = Pick<CampaignInfluencerTheme, "name" | "phase" | "objective" | "requiredContent" | "cta">;
-export type CampaignInfluencerBookingPatch = { influencerId?: EntityId | null; themeId?: EntityId | null; visitDate?: string | null; uploadDate?: string | null; notes?: string; status?: InfluencerBookingStatus; contentLink?: string | null };
+export type CampaignInfluencerBookingPatch = { influencerId?: EntityId | null; accountId?: EntityId | null; rateCardId?: EntityId | null; agreedRate?: number; themeId?: EntityId | null; visitDate?: string | null; uploadDate?: string | null; notes?: string; status?: InfluencerBookingStatus; contentLink?: string | null };
 export interface CampaignInfluencerActions {
+  saveInfluencerProfile: (input: InfluencerProfileInput, id?: EntityId) => Promise<Influencer>;
   saveInfluencerTheme: (campaignId: EntityId, input: CampaignInfluencerThemeInput, id?: EntityId) => Promise<CampaignInfluencerTheme>;
   deleteInfluencerTheme: (campaignId: EntityId, id: EntityId) => Promise<void>;
   saveInfluencerBooking: (campaignId: EntityId, input: CampaignInfluencerBookingPatch, id?: EntityId) => Promise<InfluencerSchedule>;

@@ -5,6 +5,7 @@ import type { AppData, Campaign, CampaignInfluencerBookingPatch, CampaignInfluen
 import { formatDisplayDate } from "@/lib/date-format";
 import { calculateInfluencerPaidAmount, displayInfluencerBookingStatus, displayInfluencerPaymentStatus, influencerBookingStatusTone, influencerBookingStatuses, influencerPaymentStatuses, influencerPaymentStatusTone, validateInfluencerContentLink, validateInfluencerScheduleDates } from "@/lib/campaign-influencer";
 import { Avatar, Icon, rupiah, StatusPill } from "@/components/ui";
+import { influencerAccountUrl } from "@/lib/influencer-profiles";
 
 type BookingEditDraft = { themeId: string; visitDate: string; uploadDate: string; notes: string; contentLink: string };
 
@@ -123,7 +124,7 @@ export function CampaignInfluencerTab({ campaign, themes, schedules, influencers
   };
 
   const changePaymentStatus = async (item: InfluencerSchedule, value: string) => {
-    if (!canManagePayments || !influencerPaymentStatuses.includes(value as InfluencerPaymentStatus)) return;
+    if (!canManagePayments || item.collaborationType === "Barter Endorse" || !influencerPaymentStatuses.includes(value as InfluencerPaymentStatus)) return;
     const status = value as InfluencerPaymentStatus;
     if (status === "DP dibayar") {
       setPaymentError("");
@@ -225,17 +226,19 @@ export function CampaignInfluencerTab({ campaign, themes, schedules, influencers
             const normalizedStatus = displayInfluencerBookingStatus(item.status);
             const normalizedPayment = displayInfluencerPaymentStatus(item.paymentStatus);
             const validPaymentStatus = influencerPaymentStatuses.includes(normalizedPayment as InfluencerPaymentStatus);
+            const isBarter = item.collaborationType === "Barter Endorse";
+            const accountUrl = item.usernameSnapshot ? influencerAccountUrl(item.platform, item.usernameSnapshot) : null;
             return <tr key={String(item.id)} aria-busy={pending}>
-              <td><div className="table-person"><Avatar name={item.influencer} /><div><strong>{item.influencer}</strong><small>{item.platform}</small></div></div></td>
+              <td><div className="table-person"><Avatar name={item.influencer} /><div><strong>{item.influencer}</strong>{accountUrl ? <a className="influencer-booking-social-link" href={accountUrl} target="_blank" rel="noreferrer">{item.platform} · @{item.usernameSnapshot}<Icon name="external" size={10} /></a> : <small>{item.platform}{item.usernameSnapshot ? ` · @${item.usernameSnapshot}` : ""}</small>}</div></div></td>
               <td><span className="campaign-influencer-readonly-copy" title={item.themeName || item.content}>{item.themeName || item.content || "Belum ada tema"}</span>{!item.themeId && <small>Tidak terkait dengan tema</small>}{item.notes && <small className="campaign-influencer-note" title={item.notes}>{item.notes}</small>}</td>
               <td>{formatDisplayDate(item.visitDate)}</td>
               <td>{formatDisplayDate(uploadDate)}</td>
-              <td>{rupiah(item.rate)}<small>Spent {rupiah(item.spent)}</small></td>
+              <td>{isBarter ? <><strong>Barter</strong><small>Estimasi {rupiah(item.barterValue ?? 0)}</small>{item.rateCardNameSnapshot && <small>{item.rateCardNameSnapshot}{item.rateCardDetailsSnapshot ? ` · ${item.rateCardDetailsSnapshot}` : ""}</small>}</> : <>{rupiah(item.rate)}<small>Spent {rupiah(item.spent)}</small>{item.rateCardNameSnapshot && <small>{item.rateCardNameSnapshot}{item.rateCardDetailsSnapshot ? ` · ${item.rateCardDetailsSnapshot}` : ""}</small>}</>}</td>
               <td>{canEdit ? <select className={`input campaign-influencer-status-select cooperation-${influencerBookingStatusTone(item.status)}`} aria-label={`Status kerja sama ${item.influencer}`} disabled={pending} value={influencerBookingStatuses.includes(normalizedStatus as InfluencerBookingStatus) ? normalizedStatus : item.status} onChange={(event) => changeStatus(item, event.target.value)}>
                 {!influencerBookingStatuses.includes(normalizedStatus as InfluencerBookingStatus) && <option value={item.status} disabled>{item.status}</option>}
                 {influencerBookingStatuses.map((status) => <option value={status} key={status}>{status}</option>)}
               </select> : <StatusPill status={normalizedStatus} className={`campaign-influencer-status-pill cooperation-${influencerBookingStatusTone(item.status)}`} />}</td>
-              <td>{canManagePayments ? <select className={`input campaign-influencer-status-select campaign-payment-status-select payment-${influencerPaymentStatusTone(item.paymentStatus)}`} aria-label={`Status pembayaran ${item.influencer}`} disabled={pending} value={validPaymentStatus ? normalizedPayment : item.paymentStatus} onChange={(event) => void changePaymentStatus(item, event.target.value)}>
+              <td>{isBarter ? <span className="influencer-payment-not-applicable">Tidak berlaku</span> : canManagePayments ? <select className={`input campaign-influencer-status-select campaign-payment-status-select payment-${influencerPaymentStatusTone(item.paymentStatus)}`} aria-label={`Status pembayaran ${item.influencer}`} disabled={pending} value={validPaymentStatus ? normalizedPayment : item.paymentStatus} onChange={(event) => void changePaymentStatus(item, event.target.value)}>
                 {!validPaymentStatus && <option value={item.paymentStatus} disabled>{item.paymentStatus}</option>}
                 {influencerPaymentStatuses.map((status) => <option value={status} key={status}>{status}</option>)}
               </select> : <StatusPill status={normalizedPayment} className={`campaign-influencer-status-pill payment-${influencerPaymentStatusTone(item.paymentStatus)}`} />}</td>
@@ -248,7 +251,7 @@ export function CampaignInfluencerTab({ campaign, themes, schedules, influencers
     </section>
     {editingBooking && bookingDraft && <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget && !pendingRows.includes(String(editingBooking.id))) closeBookingEditor(); }}><section ref={bookingDialogRef} className="modal campaign-detail-modal campaign-booking-edit-modal" role="dialog" aria-modal="true" aria-labelledby="campaign-booking-edit-title"><div className="modal-head"><div><h2 id="campaign-booking-edit-title">Edit jadwal influencer</h2><p>{editingBooking.influencer} · {editingBooking.platform}</p></div><button type="button" className="icon-button modal-close" disabled={pendingRows.includes(String(editingBooking.id))} onClick={closeBookingEditor} aria-label="Tutup edit jadwal"><Icon name="close" /></button></div>
       <form onSubmit={(event) => void saveBookingEdit(event)}>
-        <div className="campaign-booking-locked-summary"><span><small>Influencer</small><strong>{editingBooking.influencer}</strong></span><span><small>Rate / spent</small><strong>{rupiah(editingBooking.rate)} / {rupiah(editingBooking.spent)}</strong></span><span><small>Pembayaran</small><StatusPill status={displayInfluencerPaymentStatus(editingBooking.paymentStatus)} className={`campaign-influencer-status-pill payment-${influencerPaymentStatusTone(editingBooking.paymentStatus)}`} /></span></div>
+        <div className="campaign-booking-locked-summary"><span><small>Influencer</small><strong>{editingBooking.influencer}</strong></span>{editingBooking.collaborationType === "Barter Endorse" ? <><span><small>Jenis kerja sama</small><strong>Barter Endorse</strong></span><span><small>Estimasi barter</small><strong>{rupiah(editingBooking.barterValue ?? 0)}</strong></span><span><small>Pembayaran</small><strong>Tidak berlaku</strong></span></> : <><span><small>Rate / spent</small><strong>{rupiah(editingBooking.rate)} / {rupiah(editingBooking.spent)}</strong></span><span><small>Pembayaran</small><StatusPill status={displayInfluencerPaymentStatus(editingBooking.paymentStatus)} className={`campaign-influencer-status-pill payment-${influencerPaymentStatusTone(editingBooking.paymentStatus)}`} /></span></>}</div>
         <div className="campaign-booking-edit-fields">
           <label>Tema konten<select className="input" disabled={pendingRows.includes(String(editingBooking.id))} value={bookingDraft.themeId} onChange={(event) => setBookingDraft({ ...bookingDraft, themeId: event.target.value })}><option value="">Tidak ada tema</option>{themes.map((theme) => <option value={String(theme.id)} key={String(theme.id)}>{theme.code} · {theme.name}</option>)}</select></label>
           <label>Tanggal visit<input className="input" type="date" disabled={pendingRows.includes(String(editingBooking.id))} value={bookingDraft.visitDate} onChange={(event) => setBookingDraft({ ...bookingDraft, visitDate: event.target.value })} /></label>
@@ -257,7 +260,7 @@ export function CampaignInfluencerTab({ campaign, themes, schedules, influencers
           <label className="wide">Catatan<textarea className="input" rows={3} disabled={pendingRows.includes(String(editingBooking.id))} value={bookingDraft.notes} onChange={(event) => setBookingDraft({ ...bookingDraft, notes: event.target.value })} placeholder="Catatan untuk jadwal ini" /></label>
         </div>
         {bookingEditError && <div className="campaign-form-error" role="alert">{bookingEditError}</div>}
-        <p className="campaign-booking-locked-note">Identitas influencer, rate, spent, dan status pembayaran dikunci di form ini. Status pembayaran dapat diubah lewat dropdown pada daftar jadwal.</p>
+        <p className="campaign-booking-locked-note">Identitas influencer dan snapshot paket dikunci di form ini. {editingBooking.collaborationType === "Barter Endorse" ? "Nilai barter hanya estimasi dan tidak masuk ke spent atau pembayaran tunai." : "Rate, spent, dan status pembayaran dikelola melalui kontrol pembayaran pada daftar jadwal."}</p>
         <div className="modal-actions"><button type="button" className="button button-soft" disabled={pendingRows.includes(String(editingBooking.id))} onClick={closeBookingEditor}>Batal</button><button type="submit" className="button button-primary" disabled={pendingRows.includes(String(editingBooking.id))}><Icon name={pendingRows.includes(String(editingBooking.id)) ? "clock" : "check"} size={14} />{pendingRows.includes(String(editingBooking.id)) ? "Menyimpan…" : "Simpan perubahan"}</button></div>
       </form>
     </section></div>}
