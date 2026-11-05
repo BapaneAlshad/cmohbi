@@ -1643,6 +1643,7 @@ body.dark-mode .platform-logo.tiktok, body.dark-mode .platform-badge.tiktok { ba
 .influencer-package-grid .influencer-package-details { grid-column: span 2; }
 .danger-text { color: var(--coral) !important; }
 .influencer-master-table { min-width: 980px; }
+.influencer-row-actions { display: flex; align-items: center; gap: 6px; }
 .influencer-kind-badge { display: inline-flex; padding: 5px 8px; border: 1px solid transparent; border-radius: 999px; font-size: 9px; font-weight: 650; white-space: nowrap; }
 .influencer-kind-badge.paid { color: #5b43c6; background: #f0edff; border-color: #ded7ff; }
 .influencer-kind-badge.barter { color: #a15a13; background: #fff6df; border-color: #f6e1a6; }
@@ -1702,8 +1703,8 @@ body.dark-mode .status-pill.campaign-influencer-status-pill.cooperation-cancelle
 }
 
 /* Campaign content calendar */
-.campaign-calendar-tab { display: grid; gap: 14px; min-width: 0; }
-.campaign-calendar-card { padding: 18px; min-width: 0; }
+.campaign-calendar-tab { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(260px, .8fr); align-items: start; gap: 14px; min-width: 0; }
+.campaign-calendar-card { padding: 14px; min-width: 0; }
 .campaign-calendar-header, .campaign-calendar-day-details > header { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
 .campaign-calendar-header h2, .campaign-calendar-day-details h3 { margin: 0; font-size: 16px; font-weight: 700; text-transform: capitalize; }
 .campaign-calendar-header p, .campaign-calendar-day-details header p { margin: 4px 0 0; color: var(--muted); font-size: 11px; }
@@ -1717,7 +1718,7 @@ body.dark-mode .status-pill.campaign-influencer-status-pill.cooperation-cancelle
 .campaign-calendar-legend i.influencer { background: var(--green); }
 .campaign-calendar-weekdays, .campaign-calendar-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 5px; }
 .campaign-calendar-weekdays { margin-bottom: 5px; color: var(--muted); font-size: 10px; text-align: center; }
-.campaign-calendar-day { min-width: 0; min-height: 88px; display: flex; flex-direction: column; align-items: stretch; gap: 6px; padding: 7px; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 8px; text-align: left; transition: border-color var(--ease), background var(--ease), box-shadow var(--ease); }
+.campaign-calendar-day { min-width: 0; min-height: 70px; display: flex; flex-direction: column; align-items: stretch; gap: 5px; padding: 6px; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 8px; text-align: left; transition: border-color var(--ease), background var(--ease), box-shadow var(--ease); }
 .campaign-calendar-day:hover { background: var(--surface-subtle); border-color: var(--line-strong); }
 .campaign-calendar-day.outside { color: var(--muted); background: var(--surface-subtle); opacity: .58; }
 .campaign-calendar-day.today .campaign-calendar-day-number { color: #fff; background: var(--ink); }
@@ -1725,6 +1726,7 @@ body.dark-mode .status-pill.campaign-influencer-status-pill.cooperation-cancelle
 .campaign-calendar-day-number { width: 22px; height: 22px; display: grid; place-items: center; border-radius: 7px; font-size: 10px; font-weight: 600; }
 .campaign-calendar-day-events { display: grid; gap: 3px; min-width: 0; }
 .campaign-calendar-event { display: block; overflow: hidden; padding: 4px 5px; color: var(--purple-dark); background: var(--purple-soft); border-radius: 5px; font-size: 9px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.campaign-calendar-day-events > .campaign-calendar-event:nth-of-type(n + 3) { display: none; }
 .campaign-calendar-event.reels { color: var(--orange); background: var(--orange-soft); }
 .campaign-calendar-event.influencer { color: var(--green); background: var(--green-soft); }
 .campaign-calendar-event.done { color: var(--muted); background: var(--surface-muted); text-decoration: line-through; }
@@ -1733,7 +1735,7 @@ body.dark-mode .status-pill.campaign-influencer-status-pill.cooperation-cancelle
 .campaign-calendar-empty strong { color: var(--ink); font-size: 13px; }
 .campaign-calendar-empty span { max-width: 420px; font-size: 11px; }
 .campaign-calendar-empty.compact { min-height: 70px; }
-.campaign-calendar-day-details { padding: 15px; }
+.campaign-calendar-day-details { min-height: 230px; padding: 15px; }
 .campaign-calendar-day-details > header { padding-bottom: 10px; border-bottom: 1px solid var(--line); }
 .campaign-calendar-agenda { display: none; }
 .campaign-calendar-agenda-item { min-width: 0; display: flex; align-items: center; gap: 12px; padding: 11px 8px; border-bottom: 1px solid var(--line); border-left: 3px solid var(--purple); }
@@ -1745,6 +1747,8 @@ body.dark-mode .status-pill.campaign-influencer-status-pill.cooperation-cancelle
 .campaign-calendar-agenda-copy strong { overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
 .campaign-calendar-agenda-copy small { color: var(--muted); font-size: 10px; }
 .campaign-calendar-day-details .campaign-calendar-agenda-item:last-child { border-bottom: 0; }
+.campaign-calendar-mobile-dialog { display: none; }
+.campaign-calendar-mobile-modal { width: min(520px, 100%); }
 
 /* Member dashboard and Super Admin notes */
 .member-dashboard-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: 16px; }
@@ -1815,18 +1819,23 @@ body.dark-mode .status-pill.campaign-influencer-status-pill.cooperation-cancelle
   .admin-note-card footer { flex-direction: column; }
 }
 @media (max-width: 760px) {
+  .campaign-calendar-tab { grid-template-columns: minmax(0, 1fr); }
   .campaign-calendar-card { padding: 14px; }
   .campaign-calendar-toolbar { align-items: flex-start; flex-direction: column; }
   .campaign-calendar-toolbar .campaign-segmented { max-width: 100%; overflow-x: auto; }
   .campaign-calendar-legend { gap: 9px; font-size: 9px; }
-  .campaign-calendar-weekdays, .campaign-calendar-grid { display: none; }
-  .campaign-calendar-agenda { display: block; margin-top: 8px; }
-  .campaign-calendar-agenda > p { color: var(--muted); font-size: 12px; }
-  .campaign-calendar-agenda-item { gap: 8px; padding: 12px 5px; }
-  .campaign-calendar-agenda-item time { width: 58px; font-size: 9px; }
-  .campaign-calendar-agenda-copy strong { white-space: normal; line-height: 1.35; }
-  .campaign-calendar-agenda-item .status-pill { flex: 0 0 auto; }
+  .campaign-calendar-weekdays, .campaign-calendar-grid { display: grid; gap: 3px; }
+  .campaign-calendar-weekdays { margin-bottom: 4px; font-size: 9px; }
+  .campaign-calendar-day { min-height: 52px; gap: 3px; padding: 4px; border-radius: 7px; }
+  .campaign-calendar-day-number { width: 20px; height: 20px; font-size: 10px; }
+  .campaign-calendar-day-events { display: flex; flex-wrap: wrap; gap: 3px; min-height: 7px; }
+  .campaign-calendar-day-events > .campaign-calendar-event:nth-of-type(n + 3) { display: block; }
+  .campaign-calendar-event { width: 6px; height: 6px; flex: 0 0 6px; padding: 0; border-radius: 50%; font-size: 0; }
+  .campaign-calendar-event.done { opacity: .55; }
+  .campaign-calendar-more { display: none; }
   .campaign-calendar-day-details { display: none; }
+  .campaign-calendar-mobile-dialog { display: flex; align-items: flex-end; padding: 0; }
+  .campaign-calendar-mobile-modal { width: 100%; max-height: min(78dvh, 640px); overflow: auto; padding: 18px; border-radius: 18px 18px 0 0; }
 }
 
 /* Locked development menus are visible, but route access remains guarded. */

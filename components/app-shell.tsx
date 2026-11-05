@@ -11,7 +11,7 @@ import { persistTaskPatch, persistCampaignKpi } from "@/lib/supabase/campaign-ov
 import { canCreateCampaignExpense, validateCampaignExpense } from "@/lib/campaign-finance";
 import { persistCampaignExpense } from "@/lib/supabase/campaign-finance-data";
 import { calculateInfluencerPaidAmount, canEditCampaignInfluencers, influencerPaymentStatuses, isInfluencerBookingStatus, nextCampaignInfluencerThemeCode, validateInfluencerContentLink, validateInfluencerScheduleDates } from "@/lib/campaign-influencer";
-import { persistCampaignInfluencerTheme, persistCampaignInfluencerThemeDelete, persistCampaignInfluencerBooking, persistCampaignInfluencerBookingDelete, persistCampaignInfluencerPayment, persistInfluencerProfile } from "@/lib/supabase/campaign-influencer-data";
+import { persistCampaignInfluencerTheme, persistCampaignInfluencerThemeDelete, persistCampaignInfluencerBooking, persistCampaignInfluencerBookingDelete, persistCampaignInfluencerPayment, persistInfluencerProfile, persistInfluencerProfileDelete } from "@/lib/supabase/campaign-influencer-data";
 import { influencerProfileError, influencerProfileLegacyFields, normalizeInfluencerUsername, normalizeWhatsAppNumber } from "@/lib/influencer-profiles";
 import { demoData } from "@/lib/demo-data";
 import { demoLoginAllowed, emptyWorkspaceData } from "@/lib/production-policy";
@@ -23,7 +23,7 @@ import { createSupabaseBrowserClient, isSupabaseConfigured } from "@/lib/supabas
 import { loadWorkspaceData, saveWorkspaceData } from "@/lib/supabase/workspace-data";
 import { authEmailFromUsername, isValidPin, normalizeUsername } from "@/lib/auth-identity";
 import { createBasicCampaign, validateCampaignPeriod } from "@/lib/campaign-form";
-import { demoAccountCredentials, demoAccounts } from "@/lib/demo-account";
+import { demoAccounts } from "@/lib/demo-account";
 import { AccountView, AnalyticsView, BrandView, CalendarView, CampaignsView, DashboardView, InfluencersView, PartnersView, RequestsView, TodoView } from "./views";
 import { SocialHubView } from "./social-hub";
 import { Avatar, Icon } from "./ui";
@@ -857,6 +857,22 @@ export function AppShell() {
       : [saved, ...state.influencers.filter((item) => String(item.id) !== String(saved.id))] }));
     return saved;
   };
+  const deleteInfluencerProfile = async (id: EntityId) => {
+    if (!identity || identity.accessRole === "viewer") throw new Error("Akun baca saja tidak dapat menghapus Data Influencer.");
+    const existing = dataRef.current.influencers.find((item) => String(item.id) === String(id));
+    if (!existing) throw new Error("Profil influencer tidak ditemukan.");
+    const generation = sessionGeneration.current;
+    if (authMode === "live") {
+      if (!supabase || !liveContext) throw new Error("Koneksi workspace belum tersedia.");
+      await persistInfluencerProfileDelete(supabase, liveContext.workspaceId, id);
+    }
+    if (generation !== sessionGeneration.current) throw new Error("Sesi pengguna berubah. Coba kembali.");
+    setData((state) => ({
+      ...state,
+      influencers: state.influencers.filter((item) => String(item.id) !== String(id)),
+      influencerSchedules: state.influencerSchedules.map((item) => String(item.influencerId ?? "") === String(id) ? { ...item, influencerId: null } : item),
+    }));
+  };
   const saveInfluencerBooking = async (campaignId: EntityId, input: CampaignInfluencerBookingPatch, id?: EntityId) => {
     const current = dataRef.current;
     const campaign = current.campaigns.find((item) => String(item.id) === String(campaignId));
@@ -970,7 +986,7 @@ export function AppShell() {
     return saved;
   };
 
-  const common = { saveCampaign, saveInfluencerProfile, saveInfluencerTheme, deleteInfluencerTheme, saveInfluencerBooking, deleteInfluencerBooking, setInfluencerBookingPayment, saveCampaignTimeline, saveCampaignMembers, createCampaignDiscussionNote, setCampaignNoteDashboardPin, createCampaignExpense, data, identity, mutateTask, decideTaskStatus, openTaskEditor, refreshTaskBoard, taskBoardError, saveCampaignKpi, openModal, openResetPin, navigate, notify, notifyAction, setData, getAccessToken, refreshData, campaignLifecycleAction, requestedCampaignId, onCampaignOpened: () => setRequestedCampaignId(null), uploadMedia, uploadOwnAvatar, workspaceId: liveContext?.workspaceId, liveMode: Boolean(supabase && liveContext) };
+  const common = { saveCampaign, saveInfluencerProfile, deleteInfluencerProfile, saveInfluencerTheme, deleteInfluencerTheme, saveInfluencerBooking, deleteInfluencerBooking, setInfluencerBookingPayment, saveCampaignTimeline, saveCampaignMembers, createCampaignDiscussionNote, setCampaignNoteDashboardPin, createCampaignExpense, data, identity, mutateTask, decideTaskStatus, openTaskEditor, refreshTaskBoard, taskBoardError, saveCampaignKpi, openModal, openResetPin, navigate, notify, notifyAction, setData, getAccessToken, refreshData, campaignLifecycleAction, requestedCampaignId, onCampaignOpened: () => setRequestedCampaignId(null), uploadMedia, uploadOwnAvatar, workspaceId: liveContext?.workspaceId, liveMode: Boolean(supabase && liveContext) };
 
   const authenticate = async (action: "login" | "signup", name: string, username: string, email: string, whatsapp: string, pin: string) => {
     const demo = action === "login" && !supabase && demoLoginAllowed()
@@ -1049,15 +1065,13 @@ function LoginScreen({ configured, connectionError, onAuthenticate }: { connecti
     finally { pendingRef.current = false; setPending(false); }
   };
   return <div className="login-screen" style={{ display: "grid" }}><div className="card login-card">
-    <BrandLogo /><h1>Selamat datang kembali</h1><p>Satu ruang kerja untuk seluruh kegiatan marketing HBI.<br />Masuk dengan username dan PIN.</p>
+    <BrandLogo /><h1>Selamat datang kembali</h1><p>Satu ruang kerja untuk seluruh kegiatan marketing HBI.</p>
     <form className="form-stack" onSubmit={submit}>
       <div className="form-field"><label>Username</label><input className="input" name="username" required minLength={3} maxLength={32} pattern="[a-z][a-z0-9._-]{2,31}" autoCapitalize="none" autoComplete="username" placeholder="contoh: andi.saputra" /></div>
       <div className="form-field"><label>PIN 6 angka</label><input className="input" name="pin" type="password" required minLength={6} maxLength={6} pattern="[0-9]{6}" inputMode="numeric" autoComplete="current-password" /></div>
       <button className="button button-primary" type="submit" disabled={pending || !available}>{pending ? "Memproses…" : "Masuk ke workspace ↗"}</button>
     </form>
     {(message || connectionError) && <div className="auth-message" role="status">{message || connectionError}</div>}
-    <div className="auth-help">Lupa PIN? Hubungi Super Admin untuk reset PIN.</div>
-    <div className="demo-hint">{configured ? "Login aman dengan username + PIN melalui Supabase" : !available ? "Konfigurasi Supabase production belum tersedia." : <>Mode demo lokal · Username: <strong>{demoAccountCredentials.username}</strong> · PIN: <strong>{demoAccountCredentials.pin}</strong></>}</div>
   </div></div>;
 }
 

@@ -426,8 +426,9 @@ export function PartnersView({ data, openModal }: CommonProps) {
   </>;
 }
 
-export function InfluencersView({ data, saveInfluencerProfile, saveInfluencerBooking, notify, identity }: CommonProps) {
+export function InfluencersView({ data, saveInfluencerProfile, deleteInfluencerProfile, saveInfluencerBooking, notify, identity }: CommonProps) {
   const [linkingId, setLinkingId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [editingInfluencer, setEditingInfluencer] = useState<Influencer | null>(null);
   const [profileDialogOpen, setProfileDialogOpen] = useState(false);
   const activeCampaigns = data.campaigns.filter((campaign) => (campaign.lifecycleStatus || "active") === "active");
@@ -443,6 +444,15 @@ export function InfluencersView({ data, saveInfluencerProfile, saveInfluencerBoo
     catch (error) { notify((error as Error).message); }
     finally { setLinkingId(null); }
   };
+  const removeInfluencer = async (item: Influencer) => {
+    if (deletingId || !canEditProfiles || item.id == null) return;
+    const confirmed = window.confirm(`Hapus profil ${item.name}? Akun sosial dan paket rate card akan dihapus. Jadwal lama, snapshot, biaya, dan pembayaran tetap tersimpan sebagai histori tanpa tautan ke profil ini.`);
+    if (!confirmed) return;
+    setDeletingId(String(item.id));
+    try { await deleteInfluencerProfile(item.id); notify("Profil influencer dihapus. Histori jadwal dan pembayaran tetap tersimpan."); }
+    catch (error) { notify((error as Error).message); }
+    finally { setDeletingId(null); }
+  };
   return <><PageHeading kicker="Operasional / Influencer" title="Data Influencer" description="Kelola profil, akun sosial, niche, dan paket layanan untuk campaign." action={canEditProfiles ? <PrimaryAction onClick={() => { setEditingInfluencer(null); setProfileDialogOpen(true); }}>Tambah influencer</PrimaryAction> : undefined} />
     <div className="card table-card"><div className="card-header"><div><h2 className="card-title">Master influencer / KOL</h2><p className="card-subtitle">Pilih paket rate card saat menambahkan jadwal ke Campaign · Instagram dan TikTok</p></div></div><div className="table-wrap"><table className="data-table influencer-master-table"><thead><tr><th>Influencer</th><th>Jenis</th><th>Niche</th><th>Akun sosial &amp; followers</th><th>Paket</th>{canEditProfiles && <th>Aksi</th>}</tr></thead><tbody>{data.influencers.map((item, index) => {
       const accounts = item.accounts?.length ? item.accounts : [{ platform: item.platform === "TikTok" ? "TikTok" as const : "Instagram" as const, username: null, followers: Number.parseInt(item.followers.replace(/\D/g, ""), 10) || 0 }];
@@ -455,7 +465,7 @@ export function InfluencersView({ data, saveInfluencerProfile, saveInfluencerBoo
         <td><div className="influencer-niche-tags">{niches.length ? niches.map((niche) => <span key={niche}>{niche}</span>) : <small>Belum diisi</small>}{item.customNiche && <span>{item.customNiche}</span>}</div></td>
         <td><div className="influencer-account-links">{accounts.map((account, accountIndex) => { const href = account.username ? influencerAccountUrl(account.platform, account.username) : null; return <div className="influencer-account-link" key={`${account.platform}-${account.id ?? accountIndex}`}><span className={`influencer-platform-mark ${account.platform === "TikTok" ? "tiktok" : "instagram"}`}>{account.platform === "TikTok" ? "TT" : "IG"}</span>{href ? <a href={href} target="_blank" rel="noreferrer">@{account.username}</a> : <span className="muted-cell">{account.platform} · username belum diisi</span>}<small>{compactFollowerCount(account.followers)} followers</small></div>; })}</div></td>
         <td><div className="influencer-rate-card-summary"><strong>{packageCards.length || 1} paket</strong><small>{item.collaborationType === "Barter Endorse" ? "Nilai barter tersimpan sebagai estimasi" : `Mulai ${rupiah(lowest ?? item.rate)}`}</small>{packageCards.slice(0, 2).map((card) => <span key={card.id || card.name}>{card.name} · {rupiah(card.amount)}</span>)}{packageCards.length > 2 && <span>+{packageCards.length - 2} paket lainnya</span>}</div></td>
-        {canEditProfiles && <td><button className="button button-soft button-sm" onClick={() => { setEditingInfluencer(item); setProfileDialogOpen(true); }}><Icon name="edit" size={13} />Edit</button></td>}
+        {canEditProfiles && <td><div className="influencer-row-actions"><button className="button button-soft button-sm" onClick={() => { setEditingInfluencer(item); setProfileDialogOpen(true); }}><Icon name="edit" size={13} />Edit</button><button className="button button-soft button-sm danger-text" disabled={deletingId === String(item.id) || item.id == null} onClick={() => void removeInfluencer(item)} aria-label={`Hapus ${item.name}`} title="Hapus influencer"><Icon name="trash" size={13} />{deletingId === String(item.id) ? "Menghapus…" : "Hapus"}</button></div></td>}
       </tr>;
     })}</tbody></table></div>{data.influencers.length === 0 && <div className="influencer-master-empty"><strong>Belum ada data influencer</strong><span>Tambahkan profil untuk memilih akun dan paket saat menyusun jadwal campaign.</span></div>}</div>
     {unlinked.length > 0 && (

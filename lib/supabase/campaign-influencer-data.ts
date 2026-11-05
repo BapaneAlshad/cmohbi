@@ -44,6 +44,12 @@ export async function persistInfluencerProfile(client: SupabaseClient, workspace
   return mapInfluencer(data as SavedRow);
 }
 
+export async function persistInfluencerProfileDelete(client: SupabaseClient, workspaceId: string, id: EntityId) {
+  const { data, error } = await client.from("marketing_influencers").delete().eq("workspace_id", workspaceId).eq("id", id).select("id").maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!data) throw new Error("Profil influencer tidak ditemukan atau Anda tidak memiliki akses untuk menghapusnya.");
+}
+
 export async function persistCampaignInfluencerTheme(client: SupabaseClient, campaignId: EntityId, input: CampaignInfluencerThemeInput, id?: EntityId): Promise<CampaignInfluencerTheme> {
   const row = await save(client, "save_campaign_influencer_theme", campaignId, input, id);
   return { id: String(row.id), campaignId: String(row.campaign_id), code: String(row.code), name: String(row.name), phase: String(row.phase || ""), objective: String(row.objective || ""), requiredContent: String(row.required_content || ""), cta: String(row.cta || "") };

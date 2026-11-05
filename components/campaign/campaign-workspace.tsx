@@ -35,7 +35,7 @@ import {
 } from "./campaign-primitives";
 
 type Campaign = AppData["campaigns"][number];
-type CampaignWorkspaceInfluencerActions = Omit<CampaignInfluencerActions, "saveInfluencerProfile">;
+type CampaignWorkspaceInfluencerActions = Omit<CampaignInfluencerActions, "saveInfluencerProfile" | "deleteInfluencerProfile">;
 type CampaignTab = "overview" | "brief" | "timeline" | "content" | "influencer" | "finance" | "discussion";
 type CampaignDialogType = "info" | "brief" | "promo" | "phase" | "reference" | "influencer-theme" | "influencer-booking";
 
@@ -621,6 +621,7 @@ function CampaignContentCalendarTab({ campaign, tasks, schedules }: { campaign: 
   const [month, setMonth] = useState(() => new Date(initialDate.getFullYear(), initialDate.getMonth(), 1));
   const [filter, setFilter] = useState<"all" | "production" | "influencer">("all");
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [mobileDialogOpen, setMobileDialogOpen] = useState(false);
   const allEvents = useMemo(() => campaignCalendarEvents(campaign, tasks, schedules), [campaign, schedules, tasks]);
   const year = month.getFullYear();
   const monthIndex = month.getMonth();
@@ -633,7 +634,18 @@ function CampaignContentCalendarTab({ campaign, tasks, schedules }: { campaign: 
   const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
   const selectedEvents = selectedDate ? eventsByDate.get(selectedDate) || [] : [];
   const changeMonth = (delta: number) => { setMonth((current) => new Date(current.getFullYear(), current.getMonth() + delta, 1)); setSelectedDate(null); };
-  const goToToday = () => { setMonth(new Date(now.getFullYear(), now.getMonth(), 1)); setSelectedDate(today); };
+  const selectDate = (date: string) => { setSelectedDate(date); setMobileDialogOpen(true); };
+  const goToToday = () => { setMonth(new Date(now.getFullYear(), now.getMonth(), 1)); setSelectedDate(today); setMobileDialogOpen(true); };
+  useEffect(() => {
+    if (!mobileDialogOpen) return;
+    const closeOnEscape = (event: globalThis.KeyboardEvent) => { if (event.key === "Escape") setMobileDialogOpen(false); };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [mobileDialogOpen]);
+  const dayDetails = selectedDate ? <>
+    <header><div><h3>{calendarDateLabel(selectedDate)}</h3><p>{selectedEvents.length} jadwal pada tanggal ini</p></div></header>
+    {selectedEvents.length ? selectedEvents.map((event) => <article className={`campaign-calendar-agenda-item ${calendarEventClass(event)} ${event.status === "Done" || event.status === "Selesai" ? "done" : ""}`} key={event.id}><span className="campaign-calendar-agenda-copy"><strong>{event.title}</strong><small>{event.subtitle}</small></span><StatusPill status={displayInfluencerBookingStatus(event.status)} /></article>) : <div className="campaign-calendar-empty compact"><span>Tidak ada jadwal pada tanggal ini.</span></div>}
+  </> : <div className="campaign-calendar-empty compact"><Icon name="calendar" size={19} /><strong>Pilih tanggal</strong><span>Pilih satu tanggal pada kalender untuk melihat detail jadwalnya.</span></div>;
 
   return <div className="campaign-calendar-tab">
     <section className="card campaign-calendar-card">
@@ -644,17 +656,15 @@ function CampaignContentCalendarTab({ campaign, tasks, schedules }: { campaign: 
         {cells.map((cell) => {
           const dayEvents = eventsByDate.get(cell.dateKey) || [];
           const selected = selectedDate === cell.dateKey;
-          return <button type="button" role="gridcell" aria-selected={selected} aria-label={`${calendarDateLabel(cell.dateKey)}${dayEvents.length ? `, ${dayEvents.length} jadwal` : ", tidak ada jadwal"}`} className={`campaign-calendar-day ${cell.inMonth ? "" : "outside"} ${cell.dateKey === today ? "today" : ""} ${selected ? "selected" : ""}`} key={cell.dateKey} onClick={() => setSelectedDate(cell.dateKey)}>
-            <span className="campaign-calendar-day-number">{cell.day}</span><span className="campaign-calendar-day-events">{dayEvents.slice(0, 2).map((event) => <span title={`${event.subtitle}: ${event.title}`} className={`campaign-calendar-event ${calendarEventClass(event)} ${event.status === "Done" || event.status === "Selesai" ? "done" : ""}`} key={event.id}>{event.title}</span>)}{dayEvents.length > 2 && <span className="campaign-calendar-more">+{dayEvents.length - 2} lainnya</span>}</span>
+          return <button type="button" role="gridcell" aria-selected={selected} aria-label={`${calendarDateLabel(cell.dateKey)}${dayEvents.length ? `, ${dayEvents.length} jadwal` : ", tidak ada jadwal"}`} className={`campaign-calendar-day ${cell.inMonth ? "" : "outside"} ${cell.dateKey === today ? "today" : ""} ${selected ? "selected" : ""}`} key={cell.dateKey} onClick={() => selectDate(cell.dateKey)}>
+            <span className="campaign-calendar-day-number">{cell.day}</span><span className="campaign-calendar-day-events">{dayEvents.map((event) => <span aria-hidden="true" title={`${event.subtitle}: ${event.title}`} className={`campaign-calendar-event ${calendarEventClass(event)} ${event.status === "Done" || event.status === "Selesai" ? "done" : ""}`} key={event.id}>{event.title}</span>)}{dayEvents.length > 2 && <span className="campaign-calendar-more">+{dayEvents.length - 2} lainnya</span>}</span>
           </button>;
         })}
       </div>
       {events.length === 0 && <div className="campaign-calendar-empty"><Icon name="calendar" size={20} /><strong>Belum ada jadwal bulan ini</strong><span>Tugas Feed/Carousel atau Reels dengan deadline, serta jadwal publikasi influencer, akan tampil di sini.</span></div>}
-      <div className="campaign-calendar-agenda" aria-label="Agenda campaign bulan ini">
-        {events.length ? events.map((event) => <article className={`campaign-calendar-agenda-item ${calendarEventClass(event)} ${event.status === "Done" || event.status === "Selesai" ? "done" : ""}`} key={event.id}><time dateTime={event.date}>{calendarDateLabel(event.date)}</time><span className="campaign-calendar-agenda-copy"><strong>{event.title}</strong><small>{event.subtitle}</small></span><StatusPill status={displayInfluencerBookingStatus(event.status)} /></article>) : <p>Belum ada jadwal pada bulan ini.</p>}
-      </div>
     </section>
-    {selectedDate && <section className="card campaign-calendar-day-details"><header><div><h3>{calendarDateLabel(selectedDate)}</h3><p>{selectedEvents.length} jadwal pada tanggal ini</p></div></header>{selectedEvents.length ? selectedEvents.map((event) => <article className={`campaign-calendar-agenda-item ${calendarEventClass(event)} ${event.status === "Done" || event.status === "Selesai" ? "done" : ""}`} key={event.id}><span className="campaign-calendar-agenda-copy"><strong>{event.title}</strong><small>{event.subtitle}</small></span><StatusPill status={displayInfluencerBookingStatus(event.status)} /></article>) : <div className="campaign-calendar-empty compact"><span>Tidak ada jadwal pada tanggal ini.</span></div>}</section>}
+    <section className="card campaign-calendar-day-details" aria-label="Detail tanggal terpilih">{dayDetails}</section>
+    {mobileDialogOpen && selectedDate && <div className="modal-backdrop campaign-calendar-mobile-dialog" onMouseDown={(event) => { if (event.target === event.currentTarget) setMobileDialogOpen(false); }}><section className="modal campaign-calendar-mobile-modal" role="dialog" aria-modal="true" aria-labelledby="campaign-calendar-mobile-title"><div className="modal-head"><div><h2 id="campaign-calendar-mobile-title">{calendarDateLabel(selectedDate)}</h2><p>{selectedEvents.length} jadwal pada tanggal ini</p></div><button type="button" className="icon-button modal-close" aria-label="Tutup detail tanggal" onClick={() => setMobileDialogOpen(false)}><Icon name="close" /></button></div>{selectedEvents.length ? selectedEvents.map((event) => <article className={`campaign-calendar-agenda-item ${calendarEventClass(event)} ${event.status === "Done" || event.status === "Selesai" ? "done" : ""}`} key={event.id}><span className="campaign-calendar-agenda-copy"><strong>{event.title}</strong><small>{event.subtitle}</small></span><StatusPill status={displayInfluencerBookingStatus(event.status)} /></article>) : <div className="campaign-calendar-empty compact"><span>Tidak ada jadwal pada tanggal ini.</span></div>}</section></div>}
   </div>;
 }
 function FinanceTab({ campaign, influencerSchedules, expenses, canCreateExpense, onCreateExpense, notify }: { campaign: Campaign; influencerSchedules: AppData["influencerSchedules"]; expenses: CampaignExpense[]; canCreateExpense: boolean; onCreateExpense: (input: CampaignExpenseInput) => Promise<void>; notify: (message: string) => void }) {

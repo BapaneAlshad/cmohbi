@@ -37,6 +37,7 @@ export type CampaignInfluencerThemeInput = Pick<CampaignInfluencerTheme, "name" 
 export type CampaignInfluencerBookingPatch = { influencerId?: EntityId | null; accountId?: EntityId | null; rateCardId?: EntityId | null; agreedRate?: number; themeId?: EntityId | null; visitDate?: string | null; uploadDate?: string | null; notes?: string; status?: InfluencerBookingStatus; contentLink?: string | null };
 export interface CampaignInfluencerActions {
   saveInfluencerProfile: (input: InfluencerProfileInput, id?: EntityId) => Promise<Influencer>;
+  deleteInfluencerProfile: (id: EntityId) => Promise<void>;
   saveInfluencerTheme: (campaignId: EntityId, input: CampaignInfluencerThemeInput, id?: EntityId) => Promise<CampaignInfluencerTheme>;
   deleteInfluencerTheme: (campaignId: EntityId, id: EntityId) => Promise<void>;
   saveInfluencerBooking: (campaignId: EntityId, input: CampaignInfluencerBookingPatch, id?: EntityId) => Promise<InfluencerSchedule>;
