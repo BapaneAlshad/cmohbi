@@ -61,3 +61,9 @@ export async function createTaskRecord(client: SupabaseClient, workspaceId: stri
   const result = await client.rpc("create_marketing_task", { p_workspace_id: workspaceId, p_task_id: id, p_values: databaseTaskPatch({ ...draft, brandId }) });
   if (result.error) throw taskStorageError(result.error);
 }
+
+export async function deleteTaskRecord(client: SupabaseClient, workspaceId: string, id: EntityId) {
+  const result = await client.from("tasks").delete().eq("workspace_id", workspaceId).eq("id", id).select("id").maybeSingle();
+  if (result.error) throw taskStorageError(result.error);
+  if (!result.data) throw new Error("Tugas tidak ditemukan atau Anda tidak memiliki izin untuk menghapusnya.");
+}

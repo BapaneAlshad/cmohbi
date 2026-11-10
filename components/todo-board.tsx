@@ -9,7 +9,7 @@ import { Icon, PageHeading, StatusPill, TaskPriorityStar } from "./ui";
 import { TaskAssigneeAvatars } from "./task-assignees";
 import { formatTaskDeadline } from "@/lib/date-format";
 
-export function TodoView({ data, identity, mutateTask, openTaskEditor, decideTaskStatus, refreshTaskBoard, taskBoardError, notify }: CommonProps) {
+export function TodoView({ data, identity, mutateTask, deleteTask, openTaskEditor, decideTaskStatus, refreshTaskBoard, taskBoardError, notify }: CommonProps) {
   const manager = isTaskManager(identity);
   const [filters, setFilters] = useState<{ brand: string; pic: string; campaign: string }>({ brand: "all", pic: "all", campaign: "all" });
   const [activeId, setActiveId] = useState<EntityId | null>(null);
@@ -45,7 +45,7 @@ export function TodoView({ data, identity, mutateTask, openTaskEditor, decideTas
     </div><button className="button button-soft button-sm" onClick={() => setFilters({ brand: "all", pic: "all", campaign: "all" })}>Reset filter</button></div>
     <DndContext sensors={mobile || identity?.accessRole === "viewer" ? [] : sensors} collisionDetection={closestCenter} onDragStart={({ active }) => setActiveId(active.data.current?.taskId as EntityId)} onDragCancel={() => setActiveId(null)} onDragEnd={dragEnd}>
       <div className="todo-board-scroll"><div className="todo-board" style={{ gridTemplateColumns: `repeat(${statuses.length}, minmax(205px, 1fr))` }}>{statuses.map((status) => <TodoColumn key={status} status={status} disabled={activeId != null && status !== active?.status && !targets.includes(status)}>
-        {tasks.filter((task) => boardTaskStatus(task) === status).map((task) => <TodoCard key={String(task.id)} task={task} data={data} identity={identity} mobile={mobile} activeId={activeId} onStatus={changeStatus} onEdit={() => openTaskEditor(task.id)} onDecide={async (approve) => { try { await decideTaskStatus(task.id, approve); } catch (error) { notify((error as Error).message); throw error; } }} />)}
+        {tasks.filter((task) => boardTaskStatus(task) === status).map((task) => <TodoCard key={String(task.id)} task={task} data={data} identity={identity} mobile={mobile} activeId={activeId} onStatus={changeStatus} onEdit={() => openTaskEditor(task.id)} onDelete={async () => { try { await deleteTask(task.id); notify("Tugas berhasil dihapus."); } catch (error) { notify((error as Error).message); } }} onDecide={async (approve) => { try { await decideTaskStatus(task.id, approve); } catch (error) { notify((error as Error).message); throw error; } }} />)}
       </TodoColumn>)}</div></div>
     </DndContext>
   </>;
@@ -56,8 +56,8 @@ function TodoColumn({ status, children, disabled }: { status: TaskStatus; childr
   return <section ref={setNodeRef} className={`todo-column todo-status-${status.toLowerCase().replace(/\s+/g, "-")} ${isOver ? "is-over" : ""}`}><div className="todo-column-head"><div className="todo-column-title"><StatusPill status={status} /></div><span className="todo-column-count">{children.length}</span></div><div className="todo-stack">{children.length ? children : <div className="empty-column">Belum ada tugas</div>}</div></section>;
 }
 
-function TodoCard({ task, data, identity, mobile, activeId, onStatus, onEdit, onDecide }: { task: Task; data: AppData; identity?: UserIdentity; mobile: boolean; activeId: EntityId | null; onStatus: (id: EntityId, status: TaskStatus) => void; onEdit: () => void; onDecide: (approve: boolean) => Promise<void> }) {
-  const [menu, setMenu] = useState(false), [pendingDecision, setPendingDecision] = useState(false);
+function TodoCard({ task, data, identity, mobile, activeId, onStatus, onEdit, onDelete, onDecide }: { task: Task; data: AppData; identity?: UserIdentity; mobile: boolean; activeId: EntityId | null; onStatus: (id: EntityId, status: TaskStatus) => void; onEdit: () => void; onDelete: () => Promise<void>; onDecide: (approve: boolean) => Promise<void> }) {
+  const [menu, setMenu] = useState(false), [pendingDecision, setPendingDecision] = useState(false), [pendingDelete, setPendingDelete] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const manager = isTaskManager(identity), request = task.pendingStatusRequest;
   const allowed = allowedTaskStatuses(task, data.users, identity);
@@ -73,9 +73,14 @@ function TodoCard({ task, data, identity, mobile, activeId, onStatus, onEdit, on
     return () => { document.removeEventListener("pointerdown", close); document.removeEventListener("keydown", keydown); };
   }, [menu]);
   const decide = async (approve: boolean) => { if (pendingDecision) return; setPendingDecision(true); try { await onDecide(approve); } catch { /* The caller displays the error; keep the request available. */ } finally { setPendingDecision(false); } };
+  const removeTask = async () => {
+    if (pendingDelete || !window.confirm(`Hapus tugas “${task.title}” secara permanen? Permintaan status terkait akan ikut dihapus, sedangkan riwayat audit tetap tersimpan.`)) return;
+    setMenu(false); setPendingDelete(true);
+    try { await onDelete(); } finally { setPendingDelete(false); }
+  };
   const statusOptions = request ? [request.toStatus] : Array.from(new Set([task.status, ...allowed]));
   return <article ref={setNodeRef} style={style} className={`task-card ${String(activeId) === String(task.id) ? "is-dragging" : ""} ${request ? "task-card-awaiting" : ""}`} aria-label={request ? `${task.title}, menunggu persetujuan ${request.toStatus}` : task.title}>
-    <div className="task-card-top"><div className={draggable ? "task-drag-handle task-title-handle" : "task-title-handle"} {...(draggable ? listeners : {})} {...(draggable ? attributes : {})} title={draggable ? "Tarik untuk memindahkan tugas" : undefined}><h4>{task.title}</h4></div>{manager && <div ref={menuRef} className="task-card-menu"><button className="icon-button" onClick={() => setMenu(!menu)} aria-label={`Aksi tugas ${task.title}`} aria-haspopup="menu" aria-expanded={menu}><Icon name="more-horizontal" size={14} /></button>{menu && <div role="menu" className="task-card-menu-options"><button role="menuitem" onClick={() => { setMenu(false); onEdit(); }}><Icon name="edit" size={13} />Edit tugas</button></div>}</div>}</div>
+    <div className="task-card-top"><div className={draggable ? "task-drag-handle task-title-handle" : "task-title-handle"} {...(draggable ? listeners : {})} {...(draggable ? attributes : {})} title={draggable ? "Tarik untuk memindahkan tugas" : undefined}><h4>{task.title}</h4></div>{manager && <div ref={menuRef} className="task-card-menu"><button className="icon-button" onClick={() => setMenu(!menu)} aria-label={`Aksi tugas ${task.title}`} aria-haspopup="menu" aria-expanded={menu}><Icon name="more-horizontal" size={14} /></button>{menu && <div role="menu" className="task-card-menu-options"><button role="menuitem" onClick={() => { setMenu(false); onEdit(); }}><Icon name="edit" size={13} />Edit tugas</button><button role="menuitem" className="danger" disabled={pendingDelete} onClick={() => void removeTask()}><Icon name="trash" size={13} />Hapus tugas</button></div>}</div>}</div>
     <div className="task-brand-row"><span>{task.brand}</span><TaskPriorityStar active={taskIsPriority(task)} /></div>
     {campaign && <div className="task-campaign-name">{campaign.name}</div>}
     <div className="task-meta"><span className="task-due">{formatTaskDeadline(task, campaign)}</span><TaskAssigneeAvatars task={task} users={data.users} /></div>

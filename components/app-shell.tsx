@@ -3,7 +3,7 @@
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import type { AdminDashboardNote, AppData, CampaignDiscussionNote, CampaignExpense, CampaignExpenseInput, CampaignInfluencerBookingPatch, CampaignInfluencerTheme, CampaignInfluencerThemeInput, CampaignKpiInput, CampaignTimelinePhase, ContentItem, EntityId, Influencer, InfluencerPaymentStatus, InfluencerProfileInput, InfluencerSchedule, NotificationItem, Task, TaskDraft, TaskPatch, Transaction, User, UserIdentity, ViewName } from "@/lib/types";
 import { allowedTaskStatuses, applyStatusRequest, filteredBoardTasks, isTaskManager } from "@/lib/task-workflow";
-import { createTaskRecord, decideTaskStatus as persistStatusDecision, loadTaskBoard, requestTaskStatus } from "@/lib/supabase/task-board-data";
+import { createTaskRecord, decideTaskStatus as persistStatusDecision, deleteTaskRecord, loadTaskBoard, requestTaskStatus } from "@/lib/supabase/task-board-data";
 import { datedPhase, orderedPhases, validateTimeline } from "@/lib/campaign-timeline";
 import { TaskDialog } from "./task-dialog";
 import { applyTaskPatch, validateTaskPatch, validateKpi } from "@/lib/campaign-overview";
@@ -539,6 +539,25 @@ export function AppShell() {
       setData((state) => { const next = applyTaskPatch(state, taskId, patch, identity, eventId, createdAt); return authMode === "live" ? { ...next, taskStatusHistory: state.taskStatusHistory } : next; });
     });
   };
+  const deleteTask = (taskId: EntityId): Promise<void> => {
+    const generation = sessionGeneration.current;
+    return enqueueTaskWrite(taskId, async () => {
+      if (generation !== sessionGeneration.current) throw new Error("Sesi pengguna berubah. Coba kembali.");
+      if (!isTaskManager(identity)) throw new Error("Hanya Super Admin yang dapat menghapus tugas.");
+      const current = dataRef.current;
+      const task = latestTasks.current.get(String(taskId)) || current.tasks.find((item) => String(item.id) === String(taskId));
+      if (!task) throw new Error("Tugas tidak ditemukan.");
+      const campaign = current.campaigns.find((item) => String(item.id) === String(task.campaign));
+      if (campaign && campaign.lifecycleStatus !== "active") throw new Error("Tugas di Campaign arsip hanya dapat dibaca.");
+      if (authMode === "live") {
+        if (!supabase || !liveContext) throw new Error("Koneksi workspace belum tersedia.");
+        await deleteTaskRecord(supabase, liveContext.workspaceId, taskId);
+      }
+      if (generation !== sessionGeneration.current) throw new Error("Sesi pengguna berubah. Coba kembali.");
+      latestTasks.current.delete(String(taskId));
+      setData((state) => ({ ...state, tasks: state.tasks.filter((item) => String(item.id) !== String(taskId)) }));
+    });
+  };
   const decideTaskStatus = (taskId: EntityId, approve: boolean) => {
     const generation = sessionGeneration.current;
     return enqueueTaskWrite(taskId, async () => {
@@ -986,7 +1005,7 @@ export function AppShell() {
     return saved;
   };
 
-  const common = { saveCampaign, saveInfluencerProfile, deleteInfluencerProfile, saveInfluencerTheme, deleteInfluencerTheme, saveInfluencerBooking, deleteInfluencerBooking, setInfluencerBookingPayment, saveCampaignTimeline, saveCampaignMembers, createCampaignDiscussionNote, setCampaignNoteDashboardPin, createCampaignExpense, data, identity, mutateTask, decideTaskStatus, openTaskEditor, refreshTaskBoard, taskBoardError, saveCampaignKpi, openModal, openResetPin, navigate, notify, notifyAction, setData, getAccessToken, refreshData, campaignLifecycleAction, requestedCampaignId, onCampaignOpened: () => setRequestedCampaignId(null), uploadMedia, uploadOwnAvatar, workspaceId: liveContext?.workspaceId, liveMode: Boolean(supabase && liveContext) };
+  const common = { saveCampaign, saveInfluencerProfile, deleteInfluencerProfile, saveInfluencerTheme, deleteInfluencerTheme, saveInfluencerBooking, deleteInfluencerBooking, setInfluencerBookingPayment, saveCampaignTimeline, saveCampaignMembers, createCampaignDiscussionNote, setCampaignNoteDashboardPin, createCampaignExpense, data, identity, mutateTask, deleteTask, decideTaskStatus, openTaskEditor, refreshTaskBoard, taskBoardError, saveCampaignKpi, openModal, openResetPin, navigate, notify, notifyAction, setData, getAccessToken, refreshData, campaignLifecycleAction, requestedCampaignId, onCampaignOpened: () => setRequestedCampaignId(null), uploadMedia, uploadOwnAvatar, workspaceId: liveContext?.workspaceId, liveMode: Boolean(supabase && liveContext) };
 
   const authenticate = async (action: "login" | "signup", name: string, username: string, email: string, whatsapp: string, pin: string) => {
     const demo = action === "login" && !supabase && demoLoginAllowed()

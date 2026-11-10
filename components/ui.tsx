@@ -3,7 +3,7 @@ import { useState } from "react";
 
 import {
   AlertTriangle, ArrowLeft, ArrowRight, BarChart3, Bell, BookOpen, CalendarDays,
-  Check, CheckSquare2, ChevronLeft, ChevronRight, Circle, CircleDollarSign, Clock3,
+  Check, CheckSquare2, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Circle, CircleDollarSign, Clock3,
   Download, Edit3, ExternalLink, Eye, Film, Filter, Handshake, Home, Image as ImageIcon,
   Archive, ChartNoAxesGantt, Info, Instagram, Layers3, LayoutGrid, LayoutPanelLeft, Link2, LockKeyhole, LogOut, Menu, MessageSquare,
   Megaphone, Moon, MoreHorizontal, Paperclip, Pin, PinOff, Plus, Reply, Search, Send, Share2,
@@ -14,7 +14,7 @@ const icons: Record<string, LucideIcon> = {
   alert: AlertTriangle, archive: Archive, "arrow-left": ArrowLeft, "arrow-right": ArrowRight,
   bell: Bell, book: BookOpen, calendar: CalendarDays, campaign: Megaphone,
   check: Check, "check-square": CheckSquare2, "chevron-left": ChevronLeft,
-  "chevron-right": ChevronRight, chart: BarChart3, circle: Circle, close: X,
+  "chevron-right": ChevronRight, "chevron-up": ChevronUp, "chevron-down": ChevronDown, chart: BarChart3, circle: Circle, close: X,
   download: Download, edit: Edit3, external: ExternalLink, eye: Eye, film: Film,
   filter: Filter, handshake: Handshake, home: Home, image: ImageIcon, info: Info,
   instagram: Instagram, layers: Layers3, link: Link2, "log-out": LogOut, menu: Menu,

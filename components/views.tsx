@@ -25,6 +25,7 @@ export type CommonProps = CampaignInfluencerActions & {
   saveCampaign: SaveCampaign;
   saveCampaignTimeline: (id: EntityId, phaseMode: boolean, phases: CampaignTimelinePhase[]) => Promise<void>;
   openTaskEditor: (id?: EntityId, campaignId?: EntityId) => void;
+  deleteTask: (id: EntityId) => Promise<void>;
   decideTaskStatus: (id: EntityId, approve: boolean) => Promise<void>;
   refreshTaskBoard: () => Promise<void>;
   taskBoardError?: string;

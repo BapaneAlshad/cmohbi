@@ -713,7 +713,12 @@ button.campaign-reference-preview:hover img { transform: scale(1.025); }
 .campaign-promo-meta .status-pill { flex: 0 0 auto; }
 .campaign-promo-actions { display: flex; align-items: center; gap: 4px; flex: 0 0 auto; margin-left: auto; }
 .campaign-promo-actions .icon-button { width: 28px; height: 28px; }
+.campaign-promo-actions .icon-button:disabled { opacity: .35; cursor: not-allowed; }
 .campaign-promo-card > p { margin: 10px 0 0; color: var(--muted-dark); font-size: 10px; line-height: 1.5; }
+.campaign-promo-poster { display: block; width: 100%; max-height: 230px; margin-top: 10px; object-fit: contain; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; }
+.campaign-promo-poster-field { display: grid; gap: 8px; }
+.campaign-promo-poster-preview { display: block; width: 100%; max-height: 240px; object-fit: contain; background: var(--surface-subtle); border: 1px solid var(--line); border-radius: 8px; }
+.campaign-promo-poster-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .campaign-promo-detail { padding: 9px; margin: 10px 0 0; color: var(--muted-dark); background: var(--surface); border: 1px solid var(--line); border-radius: 7px; font-size: 10px; line-height: 1.5; }
 
 .campaign-timeline-actions { justify-content: flex-end; }
@@ -764,6 +769,7 @@ body.dark-mode .task-priority-star { color: #e7b54a; }
 .task-card-menu-options { position: absolute; top: 25px; right: -3px; z-index: 35; width: 140px; padding: 5px; border: 1px solid var(--line-strong); border-radius: 9px; background: var(--surface); box-shadow: var(--shadow-popover); }
 .task-card-menu-options > button { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 34px; padding: 7px 9px; color: var(--ink); background: transparent; border-radius: 6px; font-size: 11px; text-align: left; }
 .task-card-menu-options > button:hover { background: var(--surface-subtle); }
+.task-card-menu-options > button.danger { color: var(--coral); }
 .task-brand-row { display: flex; align-items: center; gap: 8px; margin-top: 9px; color: var(--muted); font-size: 10px; }
 .task-campaign-name { margin-top: 4px; color: var(--muted-dark); font-size: 10px; line-height: 1.5; overflow-wrap: anywhere; }
 .task-card.task-card-awaiting { background: var(--surface-muted); border: 1px dashed var(--line-strong); box-shadow: none; }

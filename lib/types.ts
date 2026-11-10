@@ -8,7 +8,7 @@ export type CampaignLifecycle = "active" | "archived" | "trashed";
 
 export type CampaignTimelinePhase = { id: string; name: string; period: string; purpose: string; status?: string; startDate?: string | null; endDate?: string | null; color?: string | null };
 export type CampaignTimelineConfig = { phaseMode: boolean; phases: CampaignTimelinePhase[]; taskPhase: Record<string, string> };
-export interface CampaignContentConfig { tagline: string; bigMessage: string; intro: string; instructions: string; instructionsPinned?: boolean; instructionsPinnedAt?: string | null; steps: string[]; promos: Array<{ id: string; title: string; period: string; detail: string; status: string; startDate?: string; endDate?: string }> }
+export interface CampaignContentConfig { tagline: string; bigMessage: string; intro: string; instructions: string; instructionsPinned?: boolean; instructionsPinnedAt?: string | null; steps: string[]; promos: Array<{ id: string; title: string; period: string; detail: string; status: string; startDate?: string; endDate?: string; summary?: string; posterUrl?: string | null }> }
 export interface Campaign { rowVersion?: number; contentConfig?: CampaignContentConfig }
 export type CampaignSavePatch = Partial<Pick<Campaign, "name" | "brandId" | "objective" | "startDate" | "endDate" | "avatarUrl" | "contentConfig" | "budget">> & { memberIds?: EntityId[] };
 export type SaveCampaign = (id: EntityId, patch: CampaignSavePatch, expectedVersion: number) => Promise<void>;
