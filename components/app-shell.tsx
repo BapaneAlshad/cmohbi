@@ -38,6 +38,7 @@ import { AdminNotesView } from "./admin-notes";
 import { DevelopmentPaywallDialog } from "./development-paywall-dialog";
 import { deleteAdminDashboardNote as persistAdminNoteDelete, persistAdminDashboardNote, persistCampaignMembers, persistCampaignNote, persistCampaignNotePin } from "@/lib/supabase/campaign-dashboard-data";
 import { isDevelopmentMenuLocked } from "@/lib/development-menus";
+import { ToolsMediaView } from "./tools-media";
 
 
 const operationalSnapshot = (value: AppData) => JSON.stringify([value.brands, value.content, value.requests, value.influencers, value.transactions, value.socialInbox]);
@@ -53,12 +54,15 @@ const navigation: Array<{ group?: string; view: ViewName; label: string; icon: s
   { view: "partners", label: "Mitra & Keuangan", icon: "handshake" },
   { view: "analytics", label: "Analitik Sosmed", icon: "chart" },
   { view: "social-hub", label: "Social Hub", icon: "instagram" },
+  { group: "TOOLS", view: "tools-lan", label: "Gallery LAN", icon: "hard-drive" },
+  { view: "tools-drive", label: "Gallery GDrive", icon: "cloud" },
+  { view: "admin-notes", label: "Catatan", icon: "pin" },
+  { view: "tools-settings", label: "Setting", icon: "settings" },
   { group: "AKUN", view: "account", label: "Akun & Keamanan", icon: "users" },
   { view: "users", label: "Manajemen User", icon: "users" },
-  { group: "ADMINISTRASI", view: "admin-notes", label: "Catatan", icon: "pin" },
 ];
 
-const titles: Record<ViewName, string> = { dashboard: "Dashboard", campaigns: "Campaign", brands: "Brand", todo: "To-Do", calendar: "Kalender Konten", requests: "Request & Ide", partners: "Mitra & Keuangan", influencers: "Data Influencer", analytics: "Analitik Sosmed", "social-hub": "Social Hub", account: "Akun & Keamanan", users: "Manajemen User", "admin-notes": "Catatan" };
+const titles: Record<ViewName, string> = { dashboard: "Dashboard", campaigns: "Campaign", brands: "Brand", todo: "To-Do", calendar: "Kalender Konten", "tools-lan": "Gallery LAN", "tools-drive": "Gallery GDrive", "tools-settings": "Setting", tools: "Gallery LAN", requests: "Request & Ide", partners: "Mitra & Keuangan", influencers: "Data Influencer", analytics: "Analitik Sosmed", "social-hub": "Social Hub", account: "Akun & Keamanan", users: "Manajemen User", "admin-notes": "Catatan" };
 
 export function AppShell() {
   const [view, setView] = useState<ViewName>("dashboard");
@@ -311,7 +315,7 @@ export function AppShell() {
       setSidebarOpen(false);
       return;
     }
-    if (["users", "admin-notes"].includes(target) && !canManageUsers(identity)) return notify("Menu ini hanya tersedia untuk Super Admin.");
+    if (["users", "admin-notes", "tools-settings"].includes(target) && !canManageUsers(identity)) return notify("Menu ini hanya tersedia untuk Super Admin.");
     setView(target as ViewName);
     setSidebarOpen(false);
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -320,6 +324,9 @@ export function AppShell() {
     if (!isDevelopmentMenuLocked(view, identity)) return;
     setView("dashboard");
     setDevelopmentPaywallOpen(false);
+  }, [view, identity.accessRole]);
+  useEffect(() => {
+    if (view === "tools" || (view === "tools-settings" && !canManageUsers(identity))) setView("dashboard");
   }, [view, identity.accessRole]);
   const openResetPin = (user: User) => { if (!canManageUsers(identity)) return; setResetUser(user); setModal("resetPin"); };
   const closeModal = () => { setModal(null); setResetUser(null); };
@@ -1005,7 +1012,7 @@ export function AppShell() {
     return saved;
   };
 
-  const common = { saveCampaign, saveInfluencerProfile, deleteInfluencerProfile, saveInfluencerTheme, deleteInfluencerTheme, saveInfluencerBooking, deleteInfluencerBooking, setInfluencerBookingPayment, saveCampaignTimeline, saveCampaignMembers, createCampaignDiscussionNote, setCampaignNoteDashboardPin, createCampaignExpense, data, identity, mutateTask, deleteTask, decideTaskStatus, openTaskEditor, refreshTaskBoard, taskBoardError, saveCampaignKpi, openModal, openResetPin, navigate, notify, notifyAction, setData, getAccessToken, refreshData, campaignLifecycleAction, requestedCampaignId, onCampaignOpened: () => setRequestedCampaignId(null), uploadMedia, uploadOwnAvatar, workspaceId: liveContext?.workspaceId, liveMode: Boolean(supabase && liveContext) };
+  const common = { saveCampaign, saveInfluencerProfile, deleteInfluencerProfile, saveInfluencerTheme, deleteInfluencerTheme, saveInfluencerBooking, deleteInfluencerBooking, setInfluencerBookingPayment, saveCampaignTimeline, saveCampaignMembers, createCampaignDiscussionNote, setCampaignNoteDashboardPin, createCampaignExpense, data, identity, mutateTask, deleteTask, decideTaskStatus, openTaskEditor, refreshTaskBoard, taskBoardError, saveCampaignKpi, openModal, openResetPin, navigate, notify, notifyAction, setData, getAccessToken, refreshData, campaignLifecycleAction, requestedCampaignId, onCampaignOpened: () => setRequestedCampaignId(null), uploadMedia, uploadOwnAvatar, workspaceId: liveContext?.workspaceId, liveMode: Boolean(supabase && liveContext), supabaseClient: supabase };
 
   const authenticate = async (action: "login" | "signup", name: string, username: string, email: string, whatsapp: string, pin: string) => {
     const demo = action === "login" && !supabase && demoLoginAllowed()
@@ -1050,7 +1057,7 @@ export function AppShell() {
   return <div className="app-shell">
     <aside className={`sidebar ${sidebarOpen ? "open" : ""}`} id="sidebar">
       <div className="brand-wrap"><BrandLogo /><div className="brand-copy"><div className="brand-name">Ngapaya</div><div className="brand-subtitle">Marketing HBI</div></div><button className="icon-button sidebar-collapse" onClick={() => setCollapsed(!collapsed)} aria-label="Ciutkan sidebar"><Icon name="panel" /></button><button className="icon-button close-sidebar" onClick={() => setSidebarOpen(false)} aria-label="Tutup menu"><Icon name="close" /></button></div>
-      <nav className="main-nav" aria-label="Navigasi utama">{navigation.filter((item) => !["users", "admin-notes"].includes(item.view) || canManageUsers(identity)).map((item) => {
+      <nav className="main-nav" aria-label="Navigasi utama">{navigation.filter((item) => !["users", "admin-notes", "tools-settings"].includes(item.view) || canManageUsers(identity)).map((item) => {
         const locked = isDevelopmentMenuLocked(item.view, identity);
         return <div key={item.view}>{item.group && <div className={`nav-label ${item.group !== "WORKSPACE" ? "nav-gap" : ""}`}>{item.group}</div>}<button type="button" className={`nav-item ${currentView === item.view ? "active" : ""} ${locked ? "nav-item-locked" : ""}`} onClick={() => navigate(item.view)} aria-label={locked ? `${item.label}. Terkunci, klik untuk membukanya.` : undefined} title={locked ? `${item.label} — Klik untuk Membukanya` : undefined}>
           {locked ? <><div className="nav-lock-base" aria-hidden="true"><Icon className="nav-icon" name={item.icon} size={15} /><span>{item.label}</span></div><div className="nav-lock-overlay" aria-hidden="true"><Icon name="lock" size={13} /><span>Klik untuk Membukanya</span></div></> : <><Icon className="nav-icon" name={item.icon} size={15} /><span>{item.label}</span>{item.view === "campaigns" ? <span className="nav-count">{data.campaigns.filter((campaign) => (campaign.lifecycleStatus || "active") === "active").length}</span> : item.view === "todo" ? <span className="nav-count">{filteredBoardTasks(data, identity, { brand: "all", pic: "all", campaign: "all" }).length}</span> : item.count && <span className="nav-count">{item.count}</span>}</>}
@@ -1059,7 +1066,7 @@ export function AppShell() {
     </aside>
     <button className={`sidebar-backdrop ${sidebarOpen ? "visible" : ""}`} onClick={() => setSidebarOpen(false)} aria-label="Tutup menu" />
     <main className="main-area"><header className="topbar"><div className="topbar-left"><button className="icon-button menu-toggle" onClick={() => setSidebarOpen(true)} aria-label="Buka menu"><Icon name="menu" /></button><div className="crumbs"><span>Workspace</span><b>/</b><strong>{titles[currentView]}</strong></div></div><div className="topbar-actions"><label className="search-box"><Icon name="search" /><input type="search" placeholder="Cari apa saja..." aria-label="Cari di workspace" onKeyDown={(event) => { if (event.key === "Enter") notify(`Pencarian “${event.currentTarget.value}” siap digunakan.`); }} /></label><button className="icon-button theme-button" onClick={() => setTheme(theme === "dark" ? "light" : "dark")} aria-label="Ubah tema"><Icon name={theme === "dark" ? "sun" : "moon"} /></button><div className="notification-anchor"><button className={`icon-button notification-button ${unreadNotifications(notifications).length ? "has-unread" : ""}`} onClick={() => { setNotificationOpen((open) => !open); if (authMode === "live") void refreshNotifications(); }} aria-label={unreadNotifications(notifications).length ? `Notifikasi, ${unreadNotifications(notifications).length} belum dibaca` : "Notifikasi"}><Icon name="bell" /><i aria-hidden="true" /></button>{notificationOpen && <NotificationPanel notifications={notifications} onOpen={(notification) => void markNotificationRead(notification)} onMarkAll={() => void markAllNotificationsRead()} />}</div><button className="top-profile" onClick={() => navigate("account")}><Avatar name={identity.name} src={identity.avatarUrl} /><span className="top-profile-copy"><strong>{identity.name}</strong><small>{identity.role}</small></span><span className="chevron">⌄</span></button></div></header>
-      <div className="page-content">{sessionError && <div className="task-board-error" role="alert">{sessionError}<button type="button" className="button button-soft button-sm" onClick={() => window.location.reload()}>Coba lagi</button></div>}{currentView === "dashboard" && <DashboardView {...common} />}{currentView === "campaigns" && <CampaignsView {...common} />}{currentView === "brands" && <BrandView {...common} />}{currentView === "todo" && <TodoView {...common} />}{currentView === "calendar" && <CalendarView {...common} />}{currentView === "requests" && <RequestsView {...common} />}{currentView === "partners" && <PartnersView {...common} />}{currentView === "influencers" && <InfluencersView {...common} />}{currentView === "analytics" && <AnalyticsView {...common} />}{currentView === "social-hub" && <SocialHubView {...common} />}{currentView === "account" && <AccountView {...common} />}{currentView === "users" && <UserManagementView users={data.users} identity={identity} onSave={saveManagedUser} onResetPin={resetPin} onUploadAvatar={uploadUserAvatar} />}{currentView === "admin-notes" && <AdminNotesView notes={data.adminDashboardNotes || []} users={data.users} identity={identity} onSave={saveAdminNote} onDelete={deleteAdminNote} />}</div>
+      <div className="page-content">{sessionError && <div className="task-board-error" role="alert">{sessionError}<button type="button" className="button button-soft button-sm" onClick={() => window.location.reload()}>Coba lagi</button></div>}{currentView === "dashboard" && <DashboardView {...common} />}{currentView === "campaigns" && <CampaignsView {...common} />}{currentView === "brands" && <BrandView {...common} />}{currentView === "todo" && <TodoView {...common} />}{currentView === "calendar" && <CalendarView {...common} />}{(currentView === "tools-lan" || currentView === "tools-drive" || currentView === "tools-settings") && <ToolsMediaView mode={currentView === "tools-lan" ? "lan" : currentView === "tools-drive" ? "drive" : "settings"} workspaceId={liveContext?.workspaceId} identity={identity} supabaseClient={supabase} liveMode={authMode === "live"} notify={notify} />}{currentView === "requests" && <RequestsView {...common} />}{currentView === "partners" && <PartnersView {...common} />}{currentView === "influencers" && <InfluencersView {...common} />}{currentView === "analytics" && <AnalyticsView {...common} />}{currentView === "social-hub" && <SocialHubView {...common} />}{currentView === "account" && <AccountView {...common} />}{currentView === "users" && <UserManagementView users={data.users} identity={identity} onSave={saveManagedUser} onResetPin={resetPin} onUploadAvatar={uploadUserAvatar} />}{currentView === "admin-notes" && <AdminNotesView notes={data.adminDashboardNotes || []} users={data.users} identity={identity} onSave={saveAdminNote} onDelete={deleteAdminNote} />}</div>
     </main>
     <div className={`toast ${toast ? "show" : ""}`} role="status">{toast?.message}{toast?.action && <button type="button" onClick={() => { toast.action?.(); setToast(null); }}>{toast.actionLabel}</button>}</div>
     {modal === "task" && isTaskManager(identity) && <TaskDialog key={`${editingTaskId ?? "new"}-${newTaskCampaignId ?? "none"}`} data={data} task={editingTaskId == null ? null : data.tasks.find((task) => String(task.id) === String(editingTaskId))} initialCampaignId={newTaskCampaignId} onClose={closeModal} onSave={saveTask} />}

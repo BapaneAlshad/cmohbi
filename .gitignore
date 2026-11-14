@@ -7,4 +7,8 @@ node_modules
 *.tsbuildinfo
 next-env.d.ts
 *.log
+__pycache__/
+*.py[cod]
+tools/windows-media-companion/.ngapaya-drive-auth.json
+ngapaya-storage*.json
 supabase/.temp/

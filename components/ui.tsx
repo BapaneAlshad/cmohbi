@@ -2,17 +2,17 @@
 import { useState } from "react";
 
 import {
-  AlertTriangle, ArrowLeft, ArrowRight, BarChart3, Bell, BookOpen, CalendarDays,
+  AlertTriangle, ArrowLeft, ArrowRight, BarChart3, Bell, BookOpen, CalendarDays, Cloud, HardDrive,
   Check, CheckSquare2, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Circle, CircleDollarSign, Clock3,
   Download, Edit3, ExternalLink, Eye, Film, Filter, Handshake, Home, Image as ImageIcon,
   Archive, ChartNoAxesGantt, Info, Instagram, Layers3, LayoutGrid, LayoutPanelLeft, Link2, LockKeyhole, LogOut, Menu, MessageSquare,
   Megaphone, Moon, MoreHorizontal, Paperclip, Pin, PinOff, Plus, Reply, Search, Send, Share2,
-  RotateCcw, Sparkles, Star, Sun, Target, Trash2, Users, X, type LucideIcon,
+  RotateCcw, Settings, Sparkles, Star, Sun, Target, Trash2, Upload, Users, X, type LucideIcon,
 } from "lucide-react";
 
 const icons: Record<string, LucideIcon> = {
   alert: AlertTriangle, archive: Archive, "arrow-left": ArrowLeft, "arrow-right": ArrowRight,
-  bell: Bell, book: BookOpen, calendar: CalendarDays, campaign: Megaphone,
+  bell: Bell, book: BookOpen, calendar: CalendarDays, campaign: Megaphone, cloud: Cloud, "hard-drive": HardDrive,
   check: Check, "check-square": CheckSquare2, "chevron-left": ChevronLeft,
   "chevron-right": ChevronRight, "chevron-up": ChevronUp, "chevron-down": ChevronDown, chart: BarChart3, circle: Circle, close: X,
   download: Download, edit: Edit3, external: ExternalLink, eye: Eye, film: Film,
@@ -20,7 +20,7 @@ const icons: Record<string, LucideIcon> = {
   instagram: Instagram, layers: Layers3, link: Link2, "log-out": LogOut, menu: Menu,
   message: MessageSquare, moon: Moon, "more-horizontal": MoreHorizontal,
   panel: LayoutPanelLeft, paperclip: Paperclip, pin: Pin, "pin-off": PinOff, plus: Plus, reply: Reply,
-  search: Search, send: Send, share: Share2, sparkles: Sparkles, sun: Sun,
+  search: Search, send: Send, share: Share2, settings: Settings, sparkles: Sparkles, sun: Sun, upload: Upload,
   restore: RotateCcw, target: Target, trash: Trash2, users: Users, wallet: CircleDollarSign, clock: Clock3,
   grid: LayoutGrid, timeline: ChartNoAxesGantt, lock: LockKeyhole,
 };

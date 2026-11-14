@@ -1,4 +1,4 @@
-export type ViewName = "dashboard" | "campaigns" | "brands" | "todo" | "calendar" | "requests" | "partners" | "influencers" | "analytics" | "social-hub" | "account" | "users" | "admin-notes";
+export type ViewName = "dashboard" | "campaigns" | "brands" | "todo" | "calendar" | "tools-lan" | "tools-drive" | "tools-settings" | "tools" | "requests" | "partners" | "influencers" | "analytics" | "social-hub" | "account" | "users" | "admin-notes";
 export type WorkspaceRole = "owner" | "admin" | "member" | "viewer";
 export type SocialPlatform = "instagram" | "facebook" | "threads" | "tiktok";
 export type SocialInboxKind = "comment" | "message";
@@ -89,4 +89,25 @@ export interface AppData {
   socialPosts: SocialPost[];
   socialInbox: SocialInboxItem[];
   notifications?: NotificationItem[];
+}
+
+export type MediaStorageSource = "pc" | "drive";
+export type MediaCompressionStatus = "original" | "queued" | "compressed" | "failed";
+export interface MediaAsset {
+  id: string;
+  workspaceId: string;
+  source: MediaStorageSource;
+  folderPath: string;
+  fileName: string;
+  mimeType: string;
+  byteSize: number;
+  originalLocation: string;
+  originalFileId?: string | null;
+  compressedLocation?: string | null;
+  compressedFileId?: string | null;
+  compressedByteSize?: number | null;
+  compressionStatus: MediaCompressionStatus;
+  campaignId?: string | null;
+  createdBy?: string | null;
+  createdAt: string;
 }
