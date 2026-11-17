@@ -829,6 +829,8 @@ body.dark-mode .task-priority-star { color: #e7b54a; }
 .tools-media-settings-drive label { grid-column: 1; }
 .tools-media-settings-drive > .button { grid-column: 2; grid-row: 2; }
 .tools-drive-state { display: flex; align-items: center; gap: 7px; color: var(--muted); font-size: 10px; }
+.tools-drive-state > span:last-child { display: grid; gap: 2px; }
+.tools-drive-state small { color: var(--muted); font-size: 9px; font-weight: 400; }
 .tools-drive-state.connected { color: #208052; }
 .tools-state-dot { width: 7px; height: 7px; background: #a6abb3; border-radius: 50%; }
 .tools-drive-state.connected .tools-state-dot { background: #30a46c; }
@@ -842,6 +844,7 @@ body.dark-mode .task-priority-star { color: #e7b54a; }
 .tools-media-dropzone strong { color: var(--ink); font-size: 11px; }
 .tools-media-dropzone span { font-size: 10px; }
 .tools-media-dropzone.active { color: var(--purple-dark); background: var(--purple-soft); border-color: var(--purple); }
+.tools-media-dropzone progress { width: min(280px, 100%); height: 7px; overflow: hidden; accent-color: var(--purple); border-radius: 999px; }
 .tools-compression-callout.has-pending { border-color: color-mix(in srgb, var(--orange) 38%, var(--line)); background: color-mix(in srgb, var(--orange-soft) 42%, var(--surface)); }
 .tools-compression-callout.has-pending > div { color: var(--orange); }
 body.dark-mode .tools-media-dropzone.active { background: #28233f; }
@@ -853,6 +856,7 @@ body.dark-mode .tools-media-dropzone.active { background: #28233f; }
 .tools-media-upload-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .tools-media-gallery { padding: 17px 19px; }
 .tools-media-gallery-head { display: flex; align-items: center; justify-content: space-between; gap: 15px; margin-bottom: 15px; }
+.tools-media-gallery-actions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 9px; }
 .tools-media-filters { display: flex; align-items: center; gap: 9px; }
 .tools-media-filters select { width: auto; min-width: 140px; }
 .tools-media-cards { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 12px; }
@@ -893,6 +897,8 @@ body.dark-mode .tools-media-error { color: #ffc2bb; background: #3b2423; border-
   .tools-media-grid, .tools-media-upload { grid-template-columns: 1fr; }
   .tools-media-gallery { padding: 14px; }
   .tools-media-gallery-head { align-items: flex-start; flex-direction: column; }
+  .tools-media-gallery-actions { width: 100%; align-items: stretch; flex-direction: column; }
+  .tools-media-gallery-actions > .button { justify-content: center; }
   .tools-media-filters { width: 100%; align-items: stretch; flex-direction: column; }
   .tools-media-filters select { width: 100%; }
   .tools-media-cards { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 9px; }
@@ -1758,6 +1764,9 @@ body.dark-mode .platform-logo.tiktok, body.dark-mode .platform-badge.tiktok { ba
 .influencer-package-grid .influencer-package-details { grid-column: span 2; }
 .danger-text { color: var(--coral) !important; }
 .influencer-master-table { min-width: 980px; }
+.influencer-number-column { width: 48px; min-width: 48px; color: var(--muted); font-size: 10px; font-variant-numeric: tabular-nums; text-align: center; }
+.influencer-total-count { display: inline-flex; align-items: center; min-height: 26px; padding: 0 9px; color: var(--muted-dark); background: var(--surface-subtle); border: 1px solid var(--line); border-radius: 999px; font-size: 10px; font-weight: 650; white-space: nowrap; }
+.influencer-list-controls { display: flex; align-items: center; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
 .influencer-row-actions { display: flex; align-items: center; gap: 6px; }
 .influencer-kind-badge { display: inline-flex; padding: 5px 8px; border: 1px solid transparent; border-radius: 999px; font-size: 9px; font-weight: 650; white-space: nowrap; }
 .influencer-kind-badge.paid { color: #5b43c6; background: #f0edff; border-color: #ded7ff; }
@@ -1766,23 +1775,29 @@ body.dark-mode .platform-logo.tiktok, body.dark-mode .platform-badge.tiktok { ba
 .influencer-niche-tags > span { padding: 4px 6px; border-radius: 5px; background: var(--surface-subtle); color: var(--muted-dark); font-size: 9px; }
 .influencer-account-links { display: grid; gap: 7px; min-width: 180px; }
 .influencer-account-link { display: grid; grid-template-columns: 24px minmax(0, 1fr); align-items: center; gap: 2px 6px; }
-.influencer-platform-mark { grid-row: span 2; display: grid; place-items: center; width: 22px; height: 22px; border-radius: 6px; color: #fff; background: #bb4e8b; font-size: 8px; font-weight: 700; }
+.influencer-platform-mark { grid-row: span 2; display: grid; place-items: center; width: 22px; height: 22px; border-radius: 6px; color: #fff; background: #bb4e8b; }
 .influencer-platform-mark.tiktok { background: #25272d; }
 .influencer-account-link > a { overflow: hidden; color: var(--ink); font-size: 10px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
 .influencer-account-link > a:hover { color: var(--accent); text-decoration: underline; }
 .influencer-account-link > small { color: var(--muted); font-size: 9px; }
 .influencer-account-link .muted-cell { grid-column: 2; font-size: 9px; }
-.influencer-whatsapp-link { display: inline-block; margin-top: 3px; color: #16804a; font-size: 10px; font-weight: 550; }
+.influencer-whatsapp-link { display: inline-flex; align-items: center; gap: 5px; margin-top: 3px; color: #16804a; font-size: 10px; font-weight: 550; }
 .influencer-whatsapp-link:hover { text-decoration: underline; }
 .influencer-rate-card-summary { display: grid; gap: 4px; min-width: 150px; }
-.influencer-rate-card-summary > strong { font-size: 11px; }
 .influencer-rate-card-summary > small, .influencer-rate-card-summary > span { color: var(--muted); font-size: 9px; }
+.influencer-rate-card-line { display: flex; align-items: center; gap: 6px; min-width: 0; color: var(--muted-dark); font-size: 9px; }
+.influencer-rate-card-icon { display: inline-grid; flex: 0 0 auto; place-items: center; width: 18px; height: 18px; color: var(--muted-dark); }
+.influencer-rate-card-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.influencer-rate-card-line > strong { margin-left: auto; color: var(--ink); font-size: 9px; white-space: nowrap; }
+.social-brand-icon { display: block; flex: 0 0 auto; }
 .influencer-master-empty { display: grid; gap: 6px; justify-items: center; padding: 28px 16px; color: var(--muted); font-size: 12px; text-align: center; }
 .influencer-master-empty strong { color: var(--ink); }
 body.dark-mode .influencer-niche-options label, body.dark-mode .influencer-account-editor, body.dark-mode .influencer-package-editor { background: #22252c; border-color: #3a3e47; color: #d6d8de; }
 body.dark-mode .influencer-kind-badge.paid { color: #d2c8ff; background: #30294b; border-color: #494070; }
 body.dark-mode .influencer-kind-badge.barter { color: #f5ce86; background: #3b2f1d; border-color: #6f5123; }
 body.dark-mode .influencer-whatsapp-link { color: #75d4a0; }
+body.dark-mode .influencer-rate-card-icon { color: #d8dbe2; }
+body.dark-mode .influencer-rate-card-line > strong { color: #f3f4f6; }
 body.dark-mode .influencer-niche-tags > span { background: #292c34; color: #c9cbd2; }
 body.dark-mode .influencer-account-link > a { color: #f3f4f6; }
 body.dark-mode .influencer-payment-not-applicable { background: #292c34; border-color: #444852; color: #bcc0ca; }
@@ -1812,6 +1827,7 @@ body.dark-mode .status-pill.campaign-influencer-status-pill.cooperation-cancelle
   .campaign-booking-edit-fields .wide { grid-column: auto; }
   .campaign-booking-edit-modal { padding: 18px; }
   .influencer-profile-modal { padding: 18px; }
+  .influencer-list-controls { width: 100%; justify-content: space-between; }
   .influencer-niche-options { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .influencer-account-grid, .influencer-package-grid { grid-template-columns: 1fr; }
   .influencer-package-grid .influencer-package-details { grid-column: auto; }

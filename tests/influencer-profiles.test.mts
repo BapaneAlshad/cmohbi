@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { compactFollowerCount, influencerAccountUrl, influencerProfileError, legacyInfluencerNiches, normalizeInfluencerUsername } from "../lib/influencer-profiles.ts";
+import { compactFollowerCount, influencerAccountUrl, influencerAvatarUrl, influencerProfileError, legacyInfluencerNiches, normalizeInfluencerUsername } from "../lib/influencer-profiles.ts";
 import type { InfluencerProfileInput } from "../lib/types.ts";
 
 const valid: InfluencerProfileInput = {
@@ -37,6 +37,9 @@ test("social profile URLs normalize @ handles and follower counts are compact", 
   assert.equal(normalizeInfluencerUsername("  @@nadia.kuliner "), "nadia.kuliner");
   assert.equal(influencerAccountUrl("Instagram", "@nadia.kuliner"), "https://www.instagram.com/nadia.kuliner/");
   assert.equal(influencerAccountUrl("TikTok", "nadiakuliner"), "https://www.tiktok.com/@nadiakuliner");
+  assert.equal(influencerAvatarUrl([{ platform: "Instagram", username: "@nadia.kuliner" }, { platform: "TikTok", username: "nadiakuliner" }]), "https://unavatar.io/instagram/nadia.kuliner");
+  assert.equal(influencerAvatarUrl([{ platform: "TikTok", username: "@nadiakuliner" }]), "https://unavatar.io/tiktok/nadiakuliner");
+  assert.equal(influencerAvatarUrl([{ platform: "Instagram", username: "" }]), null);
   assert.equal(compactFollowerCount(312000), "312 rb");
   assert.equal(compactFollowerCount(1250000), "1,3 jt");
 });

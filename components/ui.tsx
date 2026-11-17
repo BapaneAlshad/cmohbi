@@ -37,7 +37,17 @@ export function Icon({ name, size = 16, className }: { name: string; size?: numb
 export function Avatar({ name, tone = "purple", src }: { name: string; tone?: string; src?: string | null }) {
   const [failedSrc, setFailedSrc] = useState<string | null>(null);
   const initials = name.split(" ").map((word) => word[0]).slice(0, 2).join("").toUpperCase();
-  return <span className={`avatar avatar-${tone}`} aria-label={name}>{src && failedSrc !== src ? <img src={src} alt="" onError={() => setFailedSrc(src)} /> : initials}</span>;
+  return <span className={`avatar avatar-${tone}`} aria-label={name}>{src && failedSrc !== src ? <img src={src} alt="" loading="lazy" decoding="async" referrerPolicy="no-referrer" onError={() => setFailedSrc(src)} /> : initials}</span>;
+}
+
+export function SocialBrandIcon({ platform, size = 15 }: { platform: "Instagram" | "TikTok" | "WhatsApp"; size?: number }) {
+  if (platform === "Instagram") {
+    return <svg aria-hidden="true" className="social-brand-icon" width={size} height={size} viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="18" height="18" rx="5" stroke="currentColor" strokeWidth="2" /><circle cx="12" cy="12" r="4" stroke="currentColor" strokeWidth="2" /><circle cx="17.5" cy="6.5" r="1.2" fill="currentColor" /></svg>;
+  }
+  if (platform === "TikTok") {
+    return <svg aria-hidden="true" className="social-brand-icon" width={size} height={size} viewBox="0 0 24 24" fill="currentColor"><path d="M15 3v10.3a4.7 4.7 0 1 1-3.6-4.57v3.35a1.95 1.95 0 1 0 1.6 1.92V3H15c.34 1.3 1.2 2.3 2.8 2.8v2.16A5.9 5.9 0 0 1 15 7V3Z" /></svg>;
+  }
+  return <svg aria-hidden="true" className="social-brand-icon" width={size} height={size} viewBox="0 0 24 24" fill="none"><path d="M12 2.5a9.5 9.5 0 0 0-8.18 14.33L2.5 21.5l4.84-1.27A9.5 9.5 0 1 0 12 2.5Z" fill="currentColor" /><path d="M8.3 7.5c.25-.28.54-.3.8-.12l1.3 1.05c.25.2.3.48.15.75l-.48.83c.48.94 1.13 1.57 2.1 2.04l.8-.5c.25-.16.55-.12.76.1l1.08 1.22c.2.24.17.6-.08.82-.45.4-1.02.62-1.63.62-2.4 0-5.15-2.5-5.95-5.1-.18-.6.06-1.25.55-1.71l.6-.55Z" fill="var(--surface, #fff)" /></svg>;
 }
 
 export function StatusPill({ status, className = "" }: { status: string; className?: string }) {

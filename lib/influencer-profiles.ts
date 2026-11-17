@@ -45,7 +45,7 @@ export function influencerWhatsAppUrl(value: string) {
 
 export function influencerProfileError(input: InfluencerProfileInput): string | null {
   if (!input.name.trim() || input.name.trim().length > 160) return "Nama influencer wajib diisi (maksimal 160 karakter).";
-  const whatsapp = input.whatsapp.trim();
+  const whatsapp = String(input.whatsapp || "").trim();
   if (whatsapp) {
     const normalized = normalizeWhatsAppNumber(whatsapp);
     if (!/^\+?[0-9][0-9(). -]*$/.test(whatsapp) || !/^\+[1-9][0-9]{7,14}$/.test(normalized)) {
@@ -92,6 +92,16 @@ export function influencerAccountUrl(platform: string, username: string) {
   if (!handle) return null;
   return platform === "Instagram" ? `https://www.instagram.com/${encodeURIComponent(handle)}/`
     : platform === "TikTok" ? `https://www.tiktok.com/@${encodeURIComponent(handle)}` : null;
+}
+
+export function influencerAvatarUrl(accounts: Array<{ platform: string; username?: string | null }> | null | undefined) {
+  const prioritized = ["Instagram", "TikTok"];
+  for (const platform of prioritized) {
+    const account = accounts?.find((item) => item.platform === platform && normalizeInfluencerUsername(item.username || ""));
+    const handle = normalizeInfluencerUsername(account?.username || "");
+    if (handle) return `https://unavatar.io/${platform.toLowerCase()}/${encodeURIComponent(handle)}`;
+  }
+  return null;
 }
 
 export function compactFollowerCount(value: number) {

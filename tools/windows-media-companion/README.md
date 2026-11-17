@@ -17,6 +17,12 @@ Tekan **Ctrl+C** di terminal atau gunakan shortcut desktop **Hentikan Storage LA
 
 ## Gallery GDrive
 
-Jalankan **Jalankan Ngapaya Media.bat** untuk companion Drive. Masukkan dua PIN terpisah, folder kerja sementara, dan kredensial OAuth **Desktop app**. Aktifkan Google Drive API pada project Google Cloud. Di **Tools → Setting**, simpan alamat companion Drive dan PIN akses. Masukkan PIN kompresi lalu klik **Hubungkan Drive melalui companion** dan selesaikan persetujuan Google di PC. Gallery GDrive menggunakan FFmpeg untuk kompresi foto dan video oleh Super Admin. [Panduan Google Drive](https://developers.google.com/workspace/drive/api/quickstart/go)
+Gallery GDrive utama terhubung langsung melalui **Tools → Setting → Google Drive workspace**. Upload, album, sinkronisasi, preview, download, dan hapus tidak memerlukan PC companion. Konfigurasi OAuth Web aplikasi dijelaskan di `docs/gallery-gdrive.md`.
 
-Supabase menyimpan katalog Drive pada `media_assets`. Gunakan migrasi `20261112041407_media_library_catalog.sql`, `20261113032449_workspace_media_companion_settings.sql`, lalu migrasi Gallery LAN sesuai urutan. Di Gallery GDrive, tombol hapus menghapus entri katalog. Token OAuth berada dalam file `.ngapaya-drive-auth.json` di folder kerja companion dan perlu disimpan privat.
+Companion Windows hanya dibutuhkan ketika Super Admin ingin menjalankan **kompresi manual** dengan FFmpeg. Untuk kompatibilitas dengan alur kompresi saat ini:
+
+1. Pastikan Python 3.10+, FFmpeg, sertifikat HTTPS, dan private key tersedia.
+2. Jalankan **Jalankan Ngapaya Media.bat**, lalu isi alamat dan PIN pada bagian **Companion kompresi (opsional)**.
+3. Hubungkan akun Drive yang sama pada companion, kemudian gunakan tombol **Kompres** pada kartu media.
+
+Jangan membuka port companion ke internet. Matikan companion dengan **Ctrl+C** saat kompresi tidak digunakan.

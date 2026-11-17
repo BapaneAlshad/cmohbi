@@ -12,6 +12,7 @@ import os
 import re
 import secrets
 import shutil
+import ssl
 import subprocess
 import threading
 import time
@@ -27,7 +28,10 @@ from pathlib import Path
 MAX_UPLOAD = 50 * 1024 * 1024 * 1024
 CHUNK_SIZE = 1024 * 1024
 ALLOWED_ORIGINS = {
+    "https://ngapaya.my.id",
+    "https://www.ngapaya.my.id",
     "https://marketinghbi.vercel.app",
+    "https://marketinghbi-oheb-creative.vercel.app",
     "https://cmohbi.vercel.app",
     "http://localhost:4173",
     "http://127.0.0.1:4173",
@@ -54,12 +58,31 @@ def drive_auth_file() -> Path:
     return ROOT / ".ngapaya-drive-auth.json"
 
 
-def drive_connected() -> bool:
+def drive_auth_state() -> dict:
     try:
         value = json.loads(drive_auth_file().read_text(encoding="utf-8"))
-        return bool(value.get("refresh_token"))
+        return value if isinstance(value, dict) else {}
     except (OSError, json.JSONDecodeError):
-        return False
+        return {}
+
+
+def drive_connected() -> bool:
+    return bool(drive_auth_state().get("refresh_token"))
+
+
+def drive_connection_payload() -> dict:
+    stored = drive_auth_state()
+    if not stored.get("refresh_token"):
+        return {"status": "disconnected"}
+    account = stored.get("account") if isinstance(stored.get("account"), dict) else {}
+    return {
+        "status": "connected",
+        "account": {
+            "name": str(account.get("displayName") or ""),
+            "email": str(account.get("emailAddress") or ""),
+            "photo": str(account.get("photoLink") or ""),
+        },
+    }
 
 
 def drive_access_token() -> str:
@@ -82,7 +105,7 @@ def drive_access_token() -> str:
 
 def start_drive_authorization() -> None:
     if not GOOGLE_CLIENT_ID or not GOOGLE_CLIENT_SECRET:
-        raise RuntimeError("Companion belum dikonfigurasi dengan Google Desktop OAuth client. Atur --google-client-id dan --google-client-secret.")
+        raise RuntimeError("Companion belum dikonfigurasi dengan Google Desktop OAuth client. Jalankan ulang launcher dan isi client ID serta client secret.")
     state = secrets.token_urlsafe(24)
     verifier = secrets.token_urlsafe(64)
     challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).decode().rstrip("=")
@@ -128,9 +151,19 @@ def start_drive_authorization() -> None:
         token = json.loads(response.read())
     if not token.get("refresh_token"):
         raise RuntimeError("Google tidak mengirim refresh token. Hubungkan ulang dengan izin offline.")
+    account: dict = {}
+    try:
+        with drive_api("https://www.googleapis.com/drive/v3/about?fields=user", token["access_token"]) as response:
+            account = json.loads(response.read()).get("user", {})
+    except (OSError, KeyError, urllib.error.HTTPError, json.JSONDecodeError):
+        account = {}
     target = drive_auth_file()
     temp = target.with_suffix(".tmp")
-    temp.write_text(json.dumps({"refresh_token": token["refresh_token"], "connected_at": datetime.now(timezone.utc).isoformat()}), encoding="utf-8")
+    temp.write_text(json.dumps({
+        "refresh_token": token["refresh_token"],
+        "connected_at": datetime.now(timezone.utc).isoformat(),
+        "account": account,
+    }), encoding="utf-8")
     try:
         os.chmod(temp, 0o600)
     except OSError:
@@ -176,6 +209,99 @@ def drive_folder_id(folder_text: str, token: str) -> str:
     return parent
 
 
+def drive_list_media(token: str) -> tuple[str, list[dict]]:
+    """List media created by Ngapaya below the managed Drive root."""
+    root_id = drive_folder_id("", token)
+    queue: list[tuple[str, str]] = [(root_id, "")]
+    visited: set[str] = set()
+    media: list[dict] = []
+    while queue:
+        folder_id, folder_path = queue.pop(0)
+        if folder_id in visited:
+            continue
+        visited.add(folder_id)
+        page_token = ""
+        while True:
+            query = f"'{folder_id}' in parents and trashed=false"
+            params = {
+                "q": query,
+                "fields": "nextPageToken,files(id,name,mimeType,size,webViewLink,createdTime,modifiedTime,appProperties)",
+                "pageSize": "1000",
+            }
+            if page_token:
+                params["pageToken"] = page_token
+            with drive_api("https://www.googleapis.com/drive/v3/files?" + urllib.parse.urlencode(params), token) as response:
+                result = json.loads(response.read())
+            for row in result.get("files", []):
+                item_id = str(row.get("id") or "")
+                name = safe_name(str(row.get("name") or "media"))
+                mime = str(row.get("mimeType") or "application/octet-stream")
+                if not item_id:
+                    continue
+                if mime == "application/vnd.google-apps.folder":
+                    child_path = "/".join(part for part in (folder_path, name) if part)
+                    queue.append((item_id, child_path))
+                    continue
+                if not (mime.startswith("image/") or mime.startswith("video/") or mime.startswith("audio/")):
+                    continue
+                properties = row.get("appProperties") if isinstance(row.get("appProperties"), dict) else {}
+                if properties.get("ngapayaKind") == "compressed":
+                    continue
+                media.append({
+                    "id": item_id,
+                    "name": name,
+                    "mime": mime,
+                    "size": int(row.get("size") or 0),
+                    "folder": folder_path,
+                    "location": row.get("webViewLink") or f"https://drive.google.com/file/d/{item_id}/view",
+                    "createdAt": row.get("createdTime") or row.get("modifiedTime") or datetime.now(timezone.utc).isoformat(),
+                })
+            page_token = str(result.get("nextPageToken") or "")
+            if not page_token:
+                break
+    media.sort(key=lambda item: str(item.get("createdAt") or ""), reverse=True)
+    return root_id, media
+
+
+def drive_file_is_managed(file_id: str, root_id: str, token: str) -> bool:
+    """Verify the file is below the Ngapaya Media root before changing it."""
+    queue = [file_id]
+    visited: set[str] = set()
+    for _ in range(64):
+        if not queue:
+            return False
+        current = queue.pop(0)
+        if current in visited:
+            continue
+        visited.add(current)
+        with drive_api(
+            f"https://www.googleapis.com/drive/v3/files/{urllib.parse.quote(current)}?fields=id,parents,trashed",
+            token,
+        ) as response:
+            value = json.loads(response.read())
+        if value.get("trashed"):
+            return False
+        parents = [str(parent) for parent in value.get("parents", [])]
+        if root_id in parents:
+            return True
+        queue.extend(parent for parent in parents if parent not in visited)
+    return False
+
+
+def drive_trash_file(file_id: str, root_id: str, token: str) -> bool:
+    if not drive_file_is_managed(file_id, root_id, token):
+        return False
+    body = json.dumps({"trashed": True}).encode("utf-8")
+    with drive_api(
+        f"https://www.googleapis.com/drive/v3/files/{urllib.parse.quote(file_id)}?fields=id,trashed",
+        token,
+        "PATCH",
+        body,
+        {"Content-Type": "application/json; charset=UTF-8"},
+    ) as response:
+        return bool(json.loads(response.read()).get("trashed"))
+
+
 def ffmpeg_binary() -> str | None:
     if FFMPEG_PATH and Path(FFMPEG_PATH).is_file():
         return FFMPEG_PATH
@@ -213,6 +339,21 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(payload)
 
+    def _read_json(self, max_bytes: int = 16 * 1024) -> dict:
+        try:
+            size = int(self.headers.get("Content-Length", "0"))
+        except ValueError as error:
+            raise ValueError("Ukuran request tidak valid.") from error
+        if size <= 0 or size > max_bytes:
+            raise ValueError("Isi request kosong atau terlalu besar.")
+        try:
+            value = json.loads(self.rfile.read(size))
+        except json.JSONDecodeError as error:
+            raise ValueError("Isi request bukan JSON yang valid.") from error
+        if not isinstance(value, dict):
+            raise ValueError("Isi request harus berupa objek JSON.")
+        return value
+
     def _authorized(self) -> bool:
         supplied = self.headers.get("X-Oper-PIN", "")
         if hmac.compare_digest(hashlib.sha256(supplied.encode()).digest(), hashlib.sha256(PIN.encode()).digest()):
@@ -240,7 +381,16 @@ class Handler(BaseHTTPRequestHandler):
         if not self._authorized():
             return
         if parsed.path == "/api/drive/connection":
-            return self._json(200, {"status": "connected" if drive_connected() else "disconnected"})
+            return self._json(200, drive_connection_payload())
+        if parsed.path == "/api/drive/files":
+            if not drive_connected():
+                return self._json(409, {"error": "Google Drive companion belum terhubung."})
+            try:
+                token = drive_access_token()
+                root_id, files = drive_list_media(token)
+                return self._json(200, {"files": files, "rootFolderId": root_id, **drive_connection_payload()})
+            except (OSError, KeyError, ValueError, RuntimeError, urllib.error.HTTPError, json.JSONDecodeError) as error:
+                return self._json(502, {"error": f"Daftar Google Drive gagal dimuat: {error}"})
         match = re.fullmatch(r"/api/drive/thumbnail/([a-zA-Z0-9_-]{5,200})", parsed.path)
         if match:
             if not drive_connected():
@@ -302,6 +452,35 @@ class Handler(BaseHTTPRequestHandler):
         parsed = urllib.parse.urlparse(self.path)
         if not self._authorized():
             return
+        if parsed.path == "/api/drive/trash":
+            if not drive_connected():
+                return self._json(409, {"error": "Google Drive companion belum terhubung."})
+            try:
+                body = self._read_json()
+                raw_ids = body.get("fileIds")
+                if not isinstance(raw_ids, list) or not raw_ids or len(raw_ids) > 4:
+                    return self._json(400, {"error": "Daftar file Drive tidak valid."})
+                file_ids = list(dict.fromkeys(str(value) for value in raw_ids))
+                if any(not re.fullmatch(r"[a-zA-Z0-9_-]{5,200}", value) for value in file_ids):
+                    return self._json(400, {"error": "ID file Drive tidak valid."})
+                token = drive_access_token()
+                root_id = drive_folder_id("", token)
+                trashed: list[str] = []
+                skipped: list[str] = []
+                for file_id in file_ids:
+                    try:
+                        if drive_trash_file(file_id, root_id, token):
+                            trashed.append(file_id)
+                        else:
+                            skipped.append(file_id)
+                    except urllib.error.HTTPError as error:
+                        if error.code == 404:
+                            skipped.append(file_id)
+                        else:
+                            raise
+                return self._json(200, {"trashed": trashed, "skipped": skipped})
+            except (OSError, KeyError, ValueError, RuntimeError, urllib.error.HTTPError, json.JSONDecodeError) as error:
+                return self._json(502, {"error": f"File Google Drive gagal dipindahkan ke Sampah: {error}"})
         if parsed.path == "/api/drive/upload":
             return self._drive_upload(urllib.parse.parse_qs(parsed.query))
         if parsed.path == "/api/drive/connect":
@@ -385,7 +564,16 @@ class Handler(BaseHTTPRequestHandler):
             result = subprocess.run(command, capture_output=True, text=True, timeout=60 * 60 * 4, check=False)
             if result.returncode != 0 or not compressed_file.is_file() or compressed_file.stat().st_size == 0:
                 raise RuntimeError((result.stderr or "FFmpeg gagal memproses file Drive.")[-1200:])
-            metadata_body = json.dumps({"name": f"{Path(name).stem}_ringan{suffix}", "mimeType": output_mime, "parents": metadata.get("parents", [])}).encode()
+            metadata_body = json.dumps({
+                "name": f"{Path(name).stem}_ringan{suffix}",
+                "mimeType": output_mime,
+                "parents": metadata.get("parents", []),
+                "appProperties": {
+                    "ngapayaManaged": "true",
+                    "ngapayaKind": "compressed",
+                    "ngapayaOriginalId": file_id,
+                },
+            }).encode()
             with drive_api("https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable", token, "POST", metadata_body,
                 {"Content-Type": "application/json; charset=UTF-8", "X-Upload-Content-Type": output_mime, "X-Upload-Content-Length": str(compressed_file.stat().st_size)}) as response:
                 upload_url = response.headers.get("Location")
@@ -454,7 +642,15 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(409, {"error": "Google Drive akun Super Admin belum terhubung pada companion PC."})
             token = drive_access_token()
             parent = drive_folder_id(folder_text, token)
-            metadata = json.dumps({"name": name, "mimeType": mime, "parents": [parent]}).encode("utf-8")
+            metadata = json.dumps({
+                "name": name,
+                "mimeType": mime,
+                "parents": [parent],
+                "appProperties": {
+                    "ngapayaManaged": "true",
+                    "ngapayaKind": "original",
+                },
+            }).encode("utf-8")
             session_endpoint = "https://www.googleapis.com/upload/drive/v3/files?" + urllib.parse.urlencode({
                 "uploadType": "resumable", "fields": "id,name,mimeType,size,webViewLink",
             })
@@ -505,11 +701,13 @@ def main():
     parser = argparse.ArgumentParser(description="Ngapaya local media companion")
     parser.add_argument("--dir", default=str(Path.home() / "Videos" / "Ngapaya-Media"), help="Folder harddisk untuk menyimpan media")
     parser.add_argument("--port", type=int, default=8765)
-    parser.add_argument("--pin", required=True, help="PIN akses lokal, minimal 6 karakter")
-    parser.add_argument("--admin-pin", required=True, help="PIN khusus kompresi dan otorisasi Drive, minimal 6 karakter")
+    parser.add_argument("--pin", default=os.environ.get("NGAPAYA_PIN", ""), help="PIN akses lokal, minimal 6 karakter")
+    parser.add_argument("--admin-pin", default=os.environ.get("NGAPAYA_ADMIN_PIN", ""), help="PIN khusus kompresi dan otorisasi Drive, minimal 6 karakter")
     parser.add_argument("--google-client-id", default=os.environ.get("NGAPAYA_GOOGLE_CLIENT_ID", ""), help="Google OAuth client ID tipe Desktop app")
     parser.add_argument("--google-client-secret", default=os.environ.get("NGAPAYA_GOOGLE_CLIENT_SECRET", ""), help="Google OAuth client secret tipe Desktop app")
     parser.add_argument("--ffmpeg", default=os.environ.get("NGAPAYA_FFMPEG_PATH", ""), help="Path ffmpeg.exe; default memakai PATH Windows")
+    parser.add_argument("--cert", default=os.environ.get("NGAPAYA_TLS_CERT", ""), help="Sertifikat HTTPS full chain PEM")
+    parser.add_argument("--key", default=os.environ.get("NGAPAYA_TLS_KEY", ""), help="Private key sertifikat HTTPS PEM")
     args = parser.parse_args()
     if len(args.pin) < 6:
         parser.error("PIN minimal 6 karakter.")
@@ -524,9 +722,22 @@ def main():
     FFMPEG_PATH = args.ffmpeg
     server = ThreadingHTTPServer(("0.0.0.0", args.port), Handler)
     server.daemon_threads = True
+    if bool(args.cert) != bool(args.key):
+        parser.error("Sertifikat HTTPS dan private key harus diisi bersama.")
+    scheme = "http"
+    if args.cert and args.key:
+        cert_path = Path(args.cert).expanduser().resolve()
+        key_path = Path(args.key).expanduser().resolve()
+        if not cert_path.is_file() or not key_path.is_file():
+            parser.error("File sertifikat HTTPS atau private key tidak ditemukan.")
+        context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        context.minimum_version = ssl.TLSVersion.TLSv1_2
+        context.load_cert_chain(str(cert_path), str(key_path))
+        server.socket = context.wrap_socket(server.socket, server_side=True)
+        scheme = "https"
     print("Ngapaya Google Drive Companion aktif")
     print(f"Folder kerja : {ROOT}")
-    print(f"Alamat : http://<IP-PC>:{args.port}")
+    print(f"Alamat : {scheme}://<SUBDOMAIN-PC>:{args.port}")
     print("PC dan HP harus berada pada jaringan lokal yang sama. Jangan forward port ini ke internet.")
     print("Google Drive companion: " + ("siap diotorisasi" if GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET else "belum dikonfigurasi"))
     print("Tekan Ctrl+C untuk berhenti.")

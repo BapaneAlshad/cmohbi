@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent } from "react";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import type { SaveCampaign, AppData, CampaignInfluencerActions, Brand, BrandMenu, CampaignKpiInput, CampaignTimelinePhase, EntityId, Influencer, SocialPlatform, TaskPatch, TaskStatus, UserIdentity } from "@/lib/types";
-import { Avatar, compact, Icon, PageHeading, PriorityPill, rupiah, StatusPill, TaskPriorityStar } from "./ui";
+import { Avatar, compact, Icon, PageHeading, PriorityPill, rupiah, SocialBrandIcon, StatusPill, TaskPriorityStar } from "./ui";
 import { CampaignAvatar } from "./campaign/campaign-primitives";
 import { CampaignCardProgress } from "./campaign/campaign-card-progress";
 import { CampaignListTimeline } from "./campaign/campaign-list-timeline";
@@ -19,7 +19,7 @@ import { TaskAssigneeAvatars, TaskAssigneePicker, taskAssigneeIds, taskAssigneeN
 import { isMemberDashboard, memberCampaigns, memberDashboardNotes, memberDashboardTasks } from "@/lib/member-dashboard";
 import { taskIsPriority } from "@/lib/task-workflow";
 import { InfluencerProfileDialog } from "./influencer-profile-dialog";
-import { compactFollowerCount, influencerAccountUrl, influencerWhatsAppUrl } from "@/lib/influencer-profiles";
+import { compactFollowerCount, influencerAccountUrl, influencerAvatarUrl, influencerWhatsAppUrl } from "@/lib/influencer-profiles";
 
 export type CommonProps = CampaignInfluencerActions & {
   saveCampaign: SaveCampaign;
@@ -430,9 +430,11 @@ export function PartnersView({ data, openModal }: CommonProps) {
 export function InfluencersView({ data, saveInfluencerProfile, deleteInfluencerProfile, saveInfluencerBooking, notify, identity }: CommonProps) {
   const [linkingId, setLinkingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [influencerTypeFilter, setInfluencerTypeFilter] = useState("Semua");
   const [editingInfluencer, setEditingInfluencer] = useState<Influencer | null>(null);
   const [profileDialogOpen, setProfileDialogOpen] = useState(false);
   const activeCampaigns = data.campaigns.filter((campaign) => (campaign.lifecycleStatus || "active") === "active");
+  const visibleInfluencers = data.influencers.filter((item) => influencerTypeFilter === "Semua" || (influencerTypeFilter === "Barter Endorse" ? item.collaborationType === "Barter Endorse" : item.collaborationType !== "Barter Endorse"));
   const linked = (schedule: AppData["influencerSchedules"][number]) => data.campaigns.some((campaign) => String(campaign.id) === String(schedule.campaignId ?? "") || (!schedule.campaignId && campaign.name === schedule.campaign));
   const unlinked = data.influencerSchedules.filter((schedule) => !linked(schedule));
   const readOnly = identity?.accessRole === "viewer";
@@ -455,20 +457,20 @@ export function InfluencersView({ data, saveInfluencerProfile, deleteInfluencerP
     finally { setDeletingId(null); }
   };
   return <><PageHeading kicker="Operasional / Influencer" title="Data Influencer" description="Kelola profil, akun sosial, niche, dan paket layanan untuk campaign." action={canEditProfiles ? <PrimaryAction onClick={() => { setEditingInfluencer(null); setProfileDialogOpen(true); }}>Tambah influencer</PrimaryAction> : undefined} />
-    <div className="card table-card"><div className="card-header"><div><h2 className="card-title">Master influencer / KOL</h2><p className="card-subtitle">Pilih paket rate card saat menambahkan jadwal ke Campaign · Instagram dan TikTok</p></div></div><div className="table-wrap"><table className="data-table influencer-master-table"><thead><tr><th>Influencer</th><th>Jenis</th><th>Niche</th><th>Akun sosial &amp; followers</th><th>Paket</th>{canEditProfiles && <th>Aksi</th>}</tr></thead><tbody>{data.influencers.map((item, index) => {
+    <div className="card table-card"><div className="card-header"><div><h2 className="card-title">Master influencer / KOL</h2></div><div className="influencer-list-controls"><FilterSelect label="Tampilkan berdasarkan jenis influencer" value={influencerTypeFilter} values={["Semua", "Influencer", "Barter Endorse"]} onChange={setInfluencerTypeFilter} /><span className="influencer-total-count">Total {visibleInfluencers.length}</span></div></div><div className="table-wrap"><table className="data-table influencer-master-table"><thead><tr><th className="influencer-number-column">No.</th><th>Influencer</th><th>Jenis</th><th>Niche</th><th>Akun sosial &amp; followers</th><th>Paket</th>{canEditProfiles && <th>Aksi</th>}</tr></thead><tbody>{visibleInfluencers.map((item, index) => {
       const accounts = item.accounts?.length ? item.accounts : [{ platform: item.platform === "TikTok" ? "TikTok" as const : "Instagram" as const, username: null, followers: Number.parseInt(item.followers.replace(/\D/g, ""), 10) || 0 }];
       const niches = item.niches?.length ? item.niches.filter((niche) => niche !== "Lainnya") : item.niche.split(",").map((niche) => niche.trim()).filter((niche) => niche && niche !== "Belum diisi");
       const packageCards = item.rateCards || [];
-      const lowest = item.collaborationType === "Barter Endorse" ? null : packageCards.length ? Math.min(...packageCards.map((card) => card.amount)) : item.rate;
       return <tr key={item.id ?? item.name}>
-        <td><div className="table-person"><Avatar name={item.name} tone={index % 2 ? "orange" : "purple"} /><div><strong>{item.name}</strong><small>{item.status}</small>{item.whatsapp && <a className="influencer-whatsapp-link" href={influencerWhatsAppUrl(item.whatsapp) || undefined} target="_blank" rel="noreferrer" aria-label={`Hubungi ${item.name} melalui WhatsApp`}>WA · {item.whatsapp}</a>}</div></div></td>
+        <td className="influencer-number-column" aria-label={`Nomor ${index + 1}`}>{index + 1}</td>
+        <td><div className="table-person"><Avatar name={item.name} src={influencerAvatarUrl(accounts)} tone={index % 2 ? "orange" : "purple"} /><div><strong>{item.name}</strong>{item.whatsapp && <a className="influencer-whatsapp-link" href={influencerWhatsAppUrl(item.whatsapp) || undefined} target="_blank" rel="noreferrer" aria-label={`Hubungi ${item.name} melalui WhatsApp`} title={`WhatsApp ${item.name}`}><SocialBrandIcon platform="WhatsApp" size={14} /><span>{item.whatsapp}</span></a>}</div></div></td>
         <td><span className={`influencer-kind-badge ${item.collaborationType === "Barter Endorse" ? "barter" : "paid"}`}>{item.collaborationType || "Influencer"}</span></td>
         <td><div className="influencer-niche-tags">{niches.length ? niches.map((niche) => <span key={niche}>{niche}</span>) : <small>Belum diisi</small>}{item.customNiche && <span>{item.customNiche}</span>}</div></td>
-        <td><div className="influencer-account-links">{accounts.map((account, accountIndex) => { const href = account.username ? influencerAccountUrl(account.platform, account.username) : null; return <div className="influencer-account-link" key={`${account.platform}-${account.id ?? accountIndex}`}><span className={`influencer-platform-mark ${account.platform === "TikTok" ? "tiktok" : "instagram"}`}>{account.platform === "TikTok" ? "TT" : "IG"}</span>{href ? <a href={href} target="_blank" rel="noreferrer">@{account.username}</a> : <span className="muted-cell">{account.platform} · username belum diisi</span>}<small>{compactFollowerCount(account.followers)} followers</small></div>; })}</div></td>
-        <td><div className="influencer-rate-card-summary"><strong>{packageCards.length || 1} paket</strong><small>{item.collaborationType === "Barter Endorse" ? "Nilai barter tersimpan sebagai estimasi" : `Mulai ${rupiah(lowest ?? item.rate)}`}</small>{packageCards.slice(0, 2).map((card) => <span key={card.id || card.name}>{card.name} · {rupiah(card.amount)}</span>)}{packageCards.length > 2 && <span>+{packageCards.length - 2} paket lainnya</span>}</div></td>
+        <td><div className="influencer-account-links">{accounts.map((account, accountIndex) => { const href = account.username ? influencerAccountUrl(account.platform, account.username) : null; return <div className="influencer-account-link" key={`${account.platform}-${account.id ?? accountIndex}`}><span className={`influencer-platform-mark ${account.platform === "TikTok" ? "tiktok" : "instagram"}`} title={account.platform}><SocialBrandIcon platform={account.platform} size={13} /></span>{href ? <a href={href} target="_blank" rel="noreferrer">@{account.username}</a> : <span className="muted-cell">{account.platform} · username belum diisi</span>}<small>{compactFollowerCount(account.followers)} followers</small></div>; })}</div></td>
+        <td><div className="influencer-rate-card-summary">{packageCards.length ? packageCards.slice(0, 3).map((card) => <span className="influencer-rate-card-line" key={card.id || card.name}><span className="influencer-rate-card-icon" title={card.platform}>{card.platform === "Instagram" || card.platform === "TikTok" ? <SocialBrandIcon platform={card.platform} size={13} /> : <Icon name="wallet" size={13} />}</span><span className="influencer-rate-card-name">{card.name}</span><strong>{rupiah(card.amount)}</strong></span>) : <span className="muted-cell">Belum ada rate card</span>}{packageCards.length > 3 && <span>+{packageCards.length - 3} lainnya</span>}</div></td>
         {canEditProfiles && <td><div className="influencer-row-actions"><button className="button button-soft button-sm" onClick={() => { setEditingInfluencer(item); setProfileDialogOpen(true); }}><Icon name="edit" size={13} />Edit</button><button className="button button-soft button-sm danger-text" disabled={deletingId === String(item.id) || item.id == null} onClick={() => void removeInfluencer(item)} aria-label={`Hapus ${item.name}`} title="Hapus influencer"><Icon name="trash" size={13} />{deletingId === String(item.id) ? "Menghapus…" : "Hapus"}</button></div></td>}
       </tr>;
-    })}</tbody></table></div>{data.influencers.length === 0 && <div className="influencer-master-empty"><strong>Belum ada data influencer</strong><span>Tambahkan profil untuk memilih akun dan paket saat menyusun jadwal campaign.</span></div>}</div>
+    })}</tbody></table></div>{visibleInfluencers.length === 0 && <div className="influencer-master-empty"><strong>{data.influencers.length ? "Tidak ada influencer dengan jenis ini" : "Belum ada data influencer"}</strong><span>{data.influencers.length ? "Pilih jenis lain untuk menampilkan profil yang tersedia." : "Tambahkan profil untuk mengelola data influencer."}</span></div>}</div>
     {unlinked.length > 0 && (
       <section className="card table-card" style={{ marginTop: 18 }}>
         <div className="card-header">
