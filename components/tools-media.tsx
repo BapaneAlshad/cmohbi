@@ -192,30 +192,28 @@ function DriveMediaView({ mode, workspaceId, identity, supabaseClient, liveMode,
     finally { setBusy(false); }
   };
 
-  const uploadChunked = async (file: File, uploadUrl: string, chunkSize: number, signal: AbortSignal) => {
+  const uploadChunked = async (file: File, uploadToken: string, chunkSize: number, signal: AbortSignal) => {
     let offset = 0, fileId = "";
     while (offset < file.size) {
       const endExclusive = Math.min(offset + chunkSize, file.size);
-      let response: Response | null = null;
+      let result: Record<string, unknown> | null = null;
       for (let attempt = 0; attempt < 3; attempt++) {
         try {
-          response = await fetch(uploadUrl, { method: "PUT", headers: { "Content-Type": file.type, "Content-Range": `bytes ${offset}-${endExclusive - 1}/${file.size}` }, body: file.slice(offset, endExclusive), signal });
+          result = await api("/api/gallery/drive/upload-chunk", { method: "POST", headers: { "X-Upload-Token": uploadToken, "Content-Type": file.type, "Content-Range": `bytes ${offset}-${endExclusive - 1}/${file.size}` }, body: file.slice(offset, endExclusive), signal });
           break;
         } catch (failure) {
           if (signal.aborted || attempt === 2) throw failure;
           await new Promise((resolve) => window.setTimeout(resolve, 800 * (attempt + 1)));
         }
       }
-      if (!response) throw new Error("Upload ke Google Drive terputus.");
-      if (response.status === 200 || response.status === 201) {
-        const result = await response.json() as { id?: string };
-        fileId = String(result.id || ""); offset = file.size;
-      } else if (response.status === 308) {
-        const committed = response.headers.get("range")?.match(/bytes=0-(\d+)/i)?.[1];
+      if (!result) throw new Error("Upload ke Google Drive terputus.");
+      if (result.status === "complete") {
+        fileId = String(result.fileId || ""); offset = file.size;
+      } else if (result.status === "partial") {
+        const committed = String(result.range || "").match(/bytes=0-(\d+)/i)?.[1];
         offset = committed ? Number(committed) + 1 : endExclusive;
       } else {
-        const detail = await response.text().catch(() => "");
-        throw new Error(`Upload Google Drive gagal (${response.status}). ${detail.slice(0, 160)}`);
+        throw new Error("Google Drive tidak mengembalikan status upload yang dikenali.");
       }
       setUpload({ name: file.name, percent: Math.min(100, Math.round((offset / file.size) * 100)) });
     }
@@ -234,7 +232,7 @@ function DriveMediaView({ mode, workspaceId, identity, supabaseClient, liveMode,
       for (const file of files) {
         setUpload({ name: file.name, percent: 0 });
         const session = await api("/api/gallery/drive/upload-session", { method: "POST", body: JSON.stringify({ folderPath: path, fileName: file.name, mimeType: file.type, byteSize: file.size }) });
-        const fileId = await uploadChunked(file, String(session.uploadUrl), Number(session.chunkSize || 8 * 1024 * 1024), controller.signal);
+        const fileId = await uploadChunked(file, String(session.uploadToken), Number(session.chunkSize || 4 * 1024 * 1024), controller.signal);
         await api("/api/gallery/drive/uploads/complete", { method: "POST", body: JSON.stringify({ uploadToken: session.uploadToken, fileId }) });
       }
       await loadCatalog(); notify(`${files.length} media berhasil disimpan ke Google Drive.`);

@@ -14,8 +14,8 @@ export async function POST(request: Request) {
     if (!connection) return galleryJson({ error: "Google Drive belum dihubungkan oleh Super Admin." }, 409);
     const uploadId = newUploadId();
     const uploadUrl = await createResumableUpload(connection, { workspaceId, userId, folderPath, fileName, mimeType: String(body.mimeType), byteSize: Number(body.byteSize), uploadId });
-    const uploadToken = signGooglePayload({ workspaceId, userId, uploadId, folderPath, fileName, mimeType: String(body.mimeType), byteSize: Number(body.byteSize), exp: Date.now() + 24 * 60 * 60 * 1000 }, "upload");
-    return galleryJson({ uploadUrl, uploadToken, chunkSize: 8 * 1024 * 1024 });
+    const uploadToken = signGooglePayload({ workspaceId, userId, uploadId, uploadUrl, folderPath, fileName, mimeType: String(body.mimeType), byteSize: Number(body.byteSize), exp: Date.now() + 24 * 60 * 60 * 1000 }, "upload");
+    return galleryJson({ uploadToken, chunkSize: 4 * 1024 * 1024 });
   } catch (error) { return galleryErrorResponse(error); }
 }
 
