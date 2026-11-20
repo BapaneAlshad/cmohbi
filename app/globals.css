@@ -840,8 +840,6 @@ body.dark-mode .task-priority-star { color: #e7b54a; }
 .tools-media-dropzone span { font-size: 10px; }
 .tools-media-dropzone.active { color: var(--purple-dark); background: var(--purple-soft); border-color: var(--purple); }
 .tools-media-dropzone progress { width: min(280px, 100%); height: 7px; overflow: hidden; accent-color: var(--purple); border-radius: 999px; }
-.tools-compression-callout.has-pending { border-color: color-mix(in srgb, var(--orange) 38%, var(--line)); background: color-mix(in srgb, var(--orange-soft) 42%, var(--surface)); }
-.tools-compression-callout.has-pending > div { color: var(--orange); }
 body.dark-mode .tools-media-dropzone.active { background: #28233f; }
 @media (max-width: 760px) {
   .tools-media-upload { grid-template-columns: 1fr; align-items: stretch; gap: 12px; }
@@ -871,9 +869,6 @@ body.dark-mode .tools-media-dropzone.active { background: #28233f; }
 .tools-media-empty { min-height: 220px; display: grid; justify-items: center; align-content: center; gap: 9px; padding: 22px; text-align: center; }
 .tools-media-empty strong { font-size: 12px; }
 .tools-media-empty span { max-width: 390px; color: var(--muted); font-size: 10px; line-height: 1.55; }
-.tools-compression-callout { padding: 13px 16px; background: var(--surface-muted); border: 1px solid var(--line); border-radius: 10px; }
-.tools-compression-callout > div { display: flex; align-items: center; gap: 7px; font-size: 11px; }
-.tools-compression-callout p { margin: 6px 0 0; color: var(--muted); font-size: 10px; line-height: 1.55; }
 .media-modal-backdrop { position: fixed; z-index: 160; inset: 0; display: grid; place-items: center; padding: 20px; background: rgba(10,12,16,.66); }
 .tools-media-upload-dialog { width: min(560px,100%); max-height: min(90vh,720px); overflow: auto; padding: 20px; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 15px; box-shadow: 0 22px 70px rgba(10,12,16,.25); }
 .tools-media-upload-dialog > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; margin-bottom: 18px; }
