@@ -9,6 +9,7 @@ import { Icon, PageHeading } from "./ui";
 type GalleryMode = "lan" | "drive" | "settings";
 const ADMIN_PIN_KEY = "ngapaya-media-admin-pin";
 const MAX_FILE_BYTES = 50 * 1024 * 1024 * 1024;
+const NEW_ALBUM_VALUE = "__new_album__";
 
 type DriveConnectionState = {
   configured: boolean;
@@ -57,7 +58,9 @@ function DriveMediaView({ mode, workspaceId, identity, supabaseClient, liveMode,
   const [assets, setAssets] = useState<MediaAsset[]>([]);
   const [connection, setConnection] = useState<DriveConnectionState>({ configured: true, connected: false, account: null });
   const [folder, setFolder] = useState("all");
-  const [folderInput, setFolderInput] = useState("");
+  const [uploadAlbum, setUploadAlbum] = useState("");
+  const [newAlbumInput, setNewAlbumInput] = useState("");
+  const [uploadModalOpen, setUploadModalOpen] = useState(false);
   const [pcUrl, setPcUrl] = useState("");
   const [pcPin, setPcPin] = useState("");
   const [adminPin, setAdminPin] = useState("");
@@ -224,9 +227,11 @@ function DriveMediaView({ mode, workspaceId, identity, supabaseClient, liveMode,
   const uploadFiles = async (files: File[]) => {
     if (!canWrite) { setError("Viewer hanya dapat melihat dan mengunduh media."); return; }
     if (!connection.connected) { setError("Google Drive belum dihubungkan oleh Super Admin."); return; }
-    const path = folderInput.trim().replace(/^[/\\]+|[/\\]+$/g, "");
-    if (!path) { setError("Isi nama album/folder sebelum mengunggah."); return; }
+    const selectedPath = uploadAlbum === NEW_ALBUM_VALUE ? newAlbumInput : uploadAlbum;
+    const path = selectedPath.trim().replace(/^[/\\]+|[/\\]+$/g, "");
+    if (uploadAlbum === NEW_ALBUM_VALUE && !path) { setError("Isi nama album baru atau pilih Tanpa album."); return; }
     const controller = new AbortController(); uploadAbortRef.current = controller;
+    let completed = false;
     setBusy(true); setError("");
     try {
       for (const file of files) {
@@ -235,9 +240,9 @@ function DriveMediaView({ mode, workspaceId, identity, supabaseClient, liveMode,
         const fileId = await uploadChunked(file, String(session.uploadToken), Number(session.chunkSize || 4 * 1024 * 1024), controller.signal);
         await api("/api/gallery/drive/uploads/complete", { method: "POST", body: JSON.stringify({ uploadToken: session.uploadToken, fileId }) });
       }
-      await loadCatalog(); notify(`${files.length} media berhasil disimpan ke Google Drive.`);
+      await loadCatalog(); notify(`${files.length} media berhasil disimpan ke Google Drive.`); completed = true;
     } catch (failure) { setError(controller.signal.aborted ? "Upload dibatalkan." : failure instanceof Error ? failure.message : "Upload media gagal."); }
-    finally { setBusy(false); setUpload(null); uploadAbortRef.current = null; if (inputRef.current) inputRef.current.value = ""; }
+    finally { setBusy(false); setUpload(null); uploadAbortRef.current = null; if (inputRef.current) inputRef.current.value = ""; if (completed) setUploadModalOpen(false); }
   };
 
   const acceptFiles = (list: FileList | File[]) => {
@@ -288,9 +293,25 @@ function DriveMediaView({ mode, workspaceId, identity, supabaseClient, liveMode,
     finally { setBusy(false); }
   };
 
-  const albums = useMemo(() => [...new Set(assets.map((asset) => asset.folderPath || "Tanpa album"))].sort(), [assets]);
+  const albums = useMemo(() => [...new Set(assets.map((asset) => asset.folderPath).filter(Boolean))].sort(), [assets]);
   const visibleAssets = assets.filter((asset) => folder === "all" || (asset.folderPath || "Tanpa album") === folder);
   const needsCompression = assets.filter((asset) => /^(image|video)\//.test(asset.mimeType) && asset.compressionStatus !== "compressed").length;
+
+  const openUploadModal = () => {
+    setError("");
+    setUploadAlbum(folder !== "all" && folder !== "Tanpa album" ? folder : "");
+    setNewAlbumInput("");
+    setUploadModalOpen(true);
+  };
+
+  useEffect(() => {
+    if (!uploadModalOpen) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !busy) setUploadModalOpen(false);
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [busy, uploadModalOpen]);
 
   if (mode === "settings") return <>
     <PageHeading title="Setting Gallery" description="Atur Storage LAN, akun Google Drive, dan companion kompresi opsional." />
@@ -320,14 +341,14 @@ function DriveMediaView({ mode, workspaceId, identity, supabaseClient, liveMode,
       {!liveMode && <div className="tools-media-note"><Icon name="info" size={15} /> Gallery GDrive tidak tersedia pada mode demo lokal.</div>}
       <div className="tools-media-intro card"><div className="tools-media-intro-icon"><Icon name="cloud" size={20} /></div><div><strong>Google Drive workspace</strong><p>{connection.connected ? `Terhubung ke ${connection.account?.email || "akun Super Admin"}. Companion PC tidak diperlukan.` : "Super Admin perlu menghubungkan akun Google Drive dari menu Setting."}</p></div><div className="tools-media-stat"><b>{assets.length}</b><span>media</span></div></div>
       {!connection.connected && <div className="tools-media-note"><Icon name="info" size={15} /> Google Drive belum terhubung. Katalog lama tetap terlihat, tetapi file tidak dapat dibuka sampai Super Admin menghubungkan akun.</div>}
-      {canWrite && <section className="card tools-media-upload"><div><h2>Tambah media</h2><p>Pilih album lalu unggah gambar, video, atau audio langsung ke Google Drive.</p></div><div className="tools-media-upload-fields"><label>Album / folder<input value={folderInput} onChange={(event) => setFolderInput(event.target.value)} placeholder="Contoh: Campaign / Opening RUMA / Reels" /></label><div className={`tools-media-dropzone ${dragActive ? "active" : ""}`} onDragOver={(event) => { event.preventDefault(); setDragActive(true); }} onDragLeave={() => setDragActive(false)} onDrop={(event) => { event.preventDefault(); setDragActive(false); acceptFiles(event.dataTransfer.files); }}><Icon name="upload" size={18} /><strong>Tarik media ke sini</strong><span>Upload langsung ke Drive · maksimal 50 GB per file</span>{upload ? <><b>{upload.name} · {upload.percent}%</b><progress max={100} value={upload.percent} /><button className="button button-soft button-sm" onClick={() => uploadAbortRef.current?.abort()}>Batalkan</button></> : <button className="button button-primary" disabled={busy || !connection.connected} onClick={() => inputRef.current?.click()}>Pilih file</button>}<input ref={inputRef} type="file" hidden multiple accept="image/*,video/*,audio/*" onChange={() => { if (inputRef.current?.files?.length) acceptFiles(inputRef.current.files); }} /></div></div></section>}
       {!canWrite && <div className="tools-media-note"><Icon name="lock" size={15} /> Mode Viewer: Anda dapat melihat, preview, dan mengunduh media.</div>}
       {error && <div className="tools-media-note tools-media-error" role="alert"><Icon name="alert" size={15} />{error}</div>}
-      <section id="tools-media-gallery" className="card tools-media-gallery"><div className="tools-media-gallery-head"><div><h2>Album media</h2><p>Konten pada folder terkelola “Ngapaya Media”.</p></div><div className="tools-media-gallery-actions"><div className="tools-media-filters"><select value={folder} onChange={(event) => setFolder(event.target.value)} aria-label="Filter album"><option value="all">Semua album</option>{albums.map((album) => <option key={album} value={album}>{album}</option>)}</select></div>{canWrite && <button className="button button-soft button-sm" disabled={busy || !connection.connected} onClick={() => void syncDrive()}><Icon name="restore" size={13} />Segarkan dari Drive</button>}</div></div>
+      <section id="tools-media-gallery" className="card tools-media-gallery"><div className="tools-media-gallery-head"><div><h2>Album media</h2><p>Konten pada folder terkelola “Ngapaya Media”.</p></div><div className="tools-media-gallery-actions">{canWrite && <button className="button button-primary button-sm" disabled={busy || !connection.connected} onClick={openUploadModal}><Icon name="upload" size={13} />Tambah media</button>}<div className="tools-media-filters"><select value={folder} onChange={(event) => setFolder(event.target.value)} aria-label="Filter album"><option value="all">Semua album</option><option value="Tanpa album">Tanpa album</option>{albums.map((album) => <option key={album} value={album}>{album}</option>)}</select></div>{canWrite && <button className="button button-soft button-sm" disabled={busy || !connection.connected} onClick={() => void syncDrive()}><Icon name="restore" size={13} />Segarkan dari Drive</button>}</div></div>
         {visibleAssets.length ? <div className="tools-media-cards">{visibleAssets.map((asset) => <MediaCard key={asset.id} asset={asset} onOpen={() => setPreview(asset)} onDelete={() => void removeAsset(asset)} onCompress={() => void compress(asset)} onDownload={(compressed) => { const anchor = document.createElement("a"); anchor.href = `/api/gallery/drive/assets/${encodeURIComponent(asset.id)}/content?download=1${compressed ? "&version=compressed" : ""}`; anchor.click(); }} isSuperAdmin={Boolean(isSuperAdmin)} canDelete={Boolean(canWrite)} canCompress={companionDriveConnected} busy={busy} />)}</div> : <div className="tools-media-empty"><div><Icon name="cloud" size={20} /></div><strong>Belum ada media</strong><span>{canWrite ? "Unggah media atau segarkan katalog dari Google Drive." : "Belum ada media untuk workspace ini."}</span></div>}
       </section>
       <section className={`tools-compression-callout ${needsCompression ? "has-pending" : ""}`}><div><Icon name="sparkles" size={17} /><strong>Kompresi manual opsional</strong></div><p>File asli selalu tersimpan. Super Admin dapat menjalankan kompresi melalui companion Windows tanpa memengaruhi upload dan galeri utama.</p></section>
     </section>
+    {uploadModalOpen && canWrite && <div className="media-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.currentTarget === event.target && !busy) setUploadModalOpen(false); }}><div className="tools-media-upload-dialog" role="dialog" aria-modal="true" aria-labelledby="tools-media-upload-title" onMouseDown={(event) => event.stopPropagation()}><header><div><h2 id="tools-media-upload-title">Tambah media</h2><p>Simpan gambar, video, atau audio ke Google Drive.</p></div><button className="icon-button" aria-label="Tutup tambah media" disabled={busy} onClick={() => setUploadModalOpen(false)}><Icon name="close" /></button></header><div className="tools-media-upload-form"><label>Album / folder<select value={uploadAlbum} onChange={(event) => setUploadAlbum(event.target.value)}><option value="">Tanpa album</option>{albums.map((album) => <option key={album} value={album}>{album}</option>)}<option value={NEW_ALBUM_VALUE}>+ Tambah album baru</option></select></label>{uploadAlbum === NEW_ALBUM_VALUE && <label>Nama album baru<input autoFocus value={newAlbumInput} onChange={(event) => setNewAlbumInput(event.target.value)} placeholder="Contoh: Campaign / Opening RUMA / Reels" /></label>}<div className={`tools-media-dropzone tools-media-upload-dropzone ${dragActive ? "active" : ""}`} onDragOver={(event) => { event.preventDefault(); setDragActive(true); }} onDragLeave={() => setDragActive(false)} onDrop={(event) => { event.preventDefault(); setDragActive(false); acceptFiles(event.dataTransfer.files); }}><Icon name="upload" size={20} /><strong>Tarik media ke sini</strong><span>Gambar, video, atau audio · maksimal 50 GB per file</span>{upload ? <><b>{upload.name} · {upload.percent}%</b><progress max={100} value={upload.percent} /><button className="button button-soft button-sm" onClick={() => uploadAbortRef.current?.abort()}>Batalkan</button></> : <button className="button button-primary" disabled={busy || !connection.connected} onClick={() => inputRef.current?.click()}>Pilih file</button>}<input ref={inputRef} type="file" hidden multiple accept="image/*,video/*,audio/*" onChange={() => { if (inputRef.current?.files?.length) acceptFiles(inputRef.current.files); }} /></div>{error && <div className="tools-media-note tools-media-error" role="alert"><Icon name="alert" size={15} />{error}</div>}</div></div></div>}
     {preview && <div className="media-preview-backdrop" role="presentation" onClick={() => setPreview(null)}><div className="media-preview-dialog" role="dialog" aria-modal="true" aria-label={preview.fileName} onClick={(event) => event.stopPropagation()}><button className="icon-button" aria-label="Tutup preview" onClick={() => setPreview(null)}><Icon name="close" /></button>{preview.mimeType.startsWith("video/") ? <video src={`/api/gallery/drive/assets/${encodeURIComponent(preview.id)}/content${preview.compressionStatus === "compressed" ? "?version=compressed" : ""}`} controls autoPlay /> : preview.mimeType.startsWith("audio/") ? <audio src={`/api/gallery/drive/assets/${encodeURIComponent(preview.id)}/content`} controls autoPlay /> : <img src={`/api/gallery/drive/assets/${encodeURIComponent(preview.id)}/content${preview.compressionStatus === "compressed" ? "?version=compressed" : ""}`} alt={preview.fileName} />}</div></div>}
   </>;
 }

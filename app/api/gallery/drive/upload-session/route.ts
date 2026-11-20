@@ -1,6 +1,6 @@
 import { galleryErrorResponse, galleryJson, requireGalleryDriveAccess } from "@/lib/google-drive/access";
 import { signGooglePayload } from "@/lib/google-drive/crypto";
-import { cleanFolderPath, createResumableUpload, getDriveConnection, newUploadId, validateMediaUpload } from "@/lib/google-drive/service";
+import { cleanOptionalFolderPath, createResumableUpload, getDriveConnection, newUploadId, validateMediaUpload } from "@/lib/google-drive/service";
 
 export const runtime = "nodejs";
 
@@ -9,7 +9,7 @@ export async function POST(request: Request) {
     const { admin, workspaceId, userId } = await requireGalleryDriveAccess(request, ["owner", "member"]);
     const body = await request.json().catch(() => ({})) as { folderPath?: string; fileName?: string; mimeType?: string; byteSize?: number };
     const fileName = validateMediaUpload(String(body.fileName || ""), String(body.mimeType || ""), Number(body.byteSize));
-    const folderPath = cleanFolderPath(String(body.folderPath || ""));
+    const folderPath = cleanOptionalFolderPath(String(body.folderPath || ""));
     const connection = await getDriveConnection(admin, workspaceId);
     if (!connection) return galleryJson({ error: "Google Drive belum dihubungkan oleh Super Admin." }, 409);
     const uploadId = newUploadId();

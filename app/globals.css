@@ -879,6 +879,16 @@ body.dark-mode .tools-media-dropzone.active { background: #28233f; }
 .tools-compression-callout { padding: 13px 16px; background: var(--surface-muted); border: 1px solid var(--line); border-radius: 10px; }
 .tools-compression-callout > div { display: flex; align-items: center; gap: 7px; font-size: 11px; }
 .tools-compression-callout p { margin: 6px 0 0; color: var(--muted); font-size: 10px; line-height: 1.55; }
+.media-modal-backdrop { position: fixed; z-index: 160; inset: 0; display: grid; place-items: center; padding: 20px; background: rgba(10,12,16,.66); }
+.tools-media-upload-dialog { width: min(560px,100%); max-height: min(90vh,720px); overflow: auto; padding: 20px; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 15px; box-shadow: 0 22px 70px rgba(10,12,16,.25); }
+.tools-media-upload-dialog > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; margin-bottom: 18px; }
+.tools-media-upload-dialog h2 { margin: 0; font-size: 18px; }
+.tools-media-upload-dialog header p { margin: 5px 0 0; color: var(--muted); font-size: 11px; line-height: 1.5; }
+.tools-media-upload-dialog > header .icon-button { flex: 0 0 auto; }
+.tools-media-upload-form { display: grid; gap: 12px; }
+.tools-media-upload-form label { display: grid; gap: 6px; color: var(--muted-dark); font-size: 11px; font-weight: 600; }
+.tools-media-upload-form input, .tools-media-upload-form select { width: 100%; min-height: 40px; padding: 0 11px; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 9px; font: inherit; font-size: 12px; }
+.tools-media-upload-dropzone { min-height: 188px; margin-top: 3px; }
 .media-preview-backdrop { position: fixed; z-index: 150; inset: 0; display: grid; place-items: center; padding: 20px; background: rgba(10,12,16,.82); }
 .media-preview-dialog { position: relative; width: min(1100px,100%); height: min(82vh,760px); display: grid; place-items: center; }
 .media-preview-dialog > .icon-button { position: absolute; z-index: 1; top: 0; right: 0; color: #fff; background: rgba(0,0,0,.5); border-color: rgba(255,255,255,.2); }
@@ -904,6 +914,8 @@ body.dark-mode .tools-media-error { color: #ffc2bb; background: #3b2423; border-
   .tools-media-cards { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 9px; }
   .tools-media-thumb { height: 116px; }
   .tools-media-card-actions .button { flex: 1 1 auto; }
+  .media-modal-backdrop { padding: 12px; }
+  .tools-media-upload-dialog { padding: 16px; border-radius: 12px; }
 }
 .campaign-overview-focus { display: grid; gap: 18px; }
 .campaign-overview-focus-grid { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 18px; align-items: start; }

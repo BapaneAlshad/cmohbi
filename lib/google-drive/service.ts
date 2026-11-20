@@ -98,6 +98,11 @@ export function cleanFolderPath(value: string) {
   return parts.join("/");
 }
 
+export function cleanOptionalFolderPath(value: string) {
+  const parts = value.split(/[\\/]+/).map((part) => part.trim()).filter(Boolean);
+  return parts.length ? cleanFolderPath(value) : "";
+}
+
 export function validateMediaUpload(name: string, mimeType: string, size: number) {
   const cleanName = name.trim();
   if (!cleanName || cleanName.length > 255 || /[\u0000-\u001f]/.test(cleanName)) throw new GalleryDriveError("Nama file tidak valid.");
@@ -132,7 +137,8 @@ async function findOrCreateChildFolder(connection: DriveConnection, workspaceId:
 
 export async function ensureAlbumFolder(connection: DriveConnection, workspaceId: string, folderPath: string) {
   let parentId = connection.root_folder_id;
-  for (const part of cleanFolderPath(folderPath).split("/")) parentId = await findOrCreateChildFolder(connection, workspaceId, parentId, part);
+  const cleanPath = cleanOptionalFolderPath(folderPath);
+  for (const part of cleanPath ? cleanPath.split("/") : []) parentId = await findOrCreateChildFolder(connection, workspaceId, parentId, part);
   return parentId;
 }
 
