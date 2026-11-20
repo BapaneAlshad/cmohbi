@@ -339,7 +339,6 @@ function DriveMediaView({ mode, workspaceId, identity, supabaseClient, liveMode,
     <PageHeading title="Gallery GDrive" description="Galeri tim yang tersimpan langsung di Google Drive workspace." />
     <section className="tools-media-page">
       {!liveMode && <div className="tools-media-note"><Icon name="info" size={15} /> Gallery GDrive tidak tersedia pada mode demo lokal.</div>}
-      <div className="tools-media-intro card"><div className="tools-media-intro-icon"><Icon name="cloud" size={20} /></div><div><strong>Google Drive workspace</strong><p>{connection.connected ? `Terhubung ke ${connection.account?.email || "akun Super Admin"}. Companion PC tidak diperlukan.` : "Super Admin perlu menghubungkan akun Google Drive dari menu Setting."}</p></div><div className="tools-media-stat"><b>{assets.length}</b><span>media</span></div></div>
       {!connection.connected && <div className="tools-media-note"><Icon name="info" size={15} /> Google Drive belum terhubung. Katalog lama tetap terlihat, tetapi file tidak dapat dibuka sampai Super Admin menghubungkan akun.</div>}
       {!canWrite && <div className="tools-media-note"><Icon name="lock" size={15} /> Mode Viewer: Anda dapat melihat, preview, dan mengunduh media.</div>}
       {error && <div className="tools-media-note tools-media-error" role="alert"><Icon name="alert" size={15} />{error}</div>}
