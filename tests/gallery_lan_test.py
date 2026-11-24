@@ -68,6 +68,15 @@ class StorageTests(unittest.TestCase):
             self.assertEqual(storage_address("https://storage.example.com:9876"), ("192.168.0.108", 9876))
             self.assertEqual(dns.call_args.args[:2], ("storage.example.com", 9876))
 
+    def test_launcher_explains_when_dns_points_to_another_device(self):
+        def lookup(hostname, port, *args):
+            address = "192.168.0.119" if hostname != "storage.example.com" else "192.168.0.104"
+            return [(0, 0, 0, "", (address, port))]
+
+        with patch("lan_launcher.socket.getaddrinfo", side_effect=lookup):
+            with self.assertRaisesRegex(ValueError, r"menunjuk ke 192\.168\.0\.104.*192\.168\.0\.119"):
+                storage_address("https://storage.example.com:9876")
+
     @unittest.skipUnless(os.name == "nt", "Windows mutex")
     def test_single_windows_instance(self):
         with tempfile.TemporaryDirectory() as tmp:

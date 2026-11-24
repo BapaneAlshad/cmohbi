@@ -86,6 +86,15 @@ def storage_address(url: str) -> tuple[str, int]:
     if not 1024 <= port <= 65535:
         raise ValueError("Port Storage LAN harus antara 1024 dan 65535.")
     networks = tuple(ipaddress.ip_network(cidr) for cidr in ("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"))
+    local_addresses: set[str] = set()
+    try:
+        local_addresses = {
+            entry[4][0]
+            for entry in socket.getaddrinfo(socket.gethostname(), 0, socket.AF_INET, socket.SOCK_STREAM)
+            if entry[4][0] not in {"0.0.0.0", "127.0.0.1"}
+        }
+    except socket.gaierror:
+        pass
     try:
         addresses = {entry[4][0] for entry in socket.getaddrinfo(target.hostname, port, socket.AF_INET, socket.SOCK_STREAM)}
     except socket.gaierror:
@@ -95,6 +104,9 @@ def storage_address(url: str) -> tuple[str, int]:
     address = addresses.pop()
     if not any(ipaddress.ip_address(address) in network for network in networks):
         raise ValueError("Subdomain Storage LAN harus mengarah ke IP lokal PC.")
+    if local_addresses and address not in local_addresses:
+        current = ", ".join(sorted(local_addresses))
+        raise ValueError(f"DNS Storage LAN menunjuk ke {address}, tetapi IP PC ini adalah {current}. Ubah A record lan.ngapaya.my.id ke IP PC yang sedang aktif atau gunakan reservasi DHCP, lalu jalankan ulang.")
     return address, port
 
 
