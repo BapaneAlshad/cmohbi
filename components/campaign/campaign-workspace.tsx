@@ -978,7 +978,7 @@ function TextArea({ label, name, required, defaultValue, placeholder }: { label:
 }
 
 function campaignBrands(data: AppData, currentBrand: string) {
-  return Array.from(new Set([currentBrand, ...data.campaigns.map((item) => item.brand), ...data.content.map((item) => item.brand), ...data.requests.map((item) => item.brand), ...data.transactions.map((item) => item.brand)].map((brand) => brand.trim()).filter(Boolean))).sort((left, right) => left.localeCompare(right, "id"));
+  return Array.from(new Set([currentBrand, ...data.brands.map((item) => item.name)].map((brand) => brand.trim()).filter(Boolean))).sort((left, right) => left.localeCompare(right, "id"));
 }
 
 function Select({ label, name, values, labels, defaultValue, required = false }: { label: string; name: string; values: string[]; labels?: string[]; defaultValue?: string; required?: boolean }) {

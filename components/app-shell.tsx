@@ -1179,7 +1179,7 @@ function AppModal({ createCampaignRecord, type, data, close, identity, notify, r
         const brand = String(values.brand || "").trim();
         const startDate = String(values.startDate || "");
         const endDate = String(values.endDate || "");
-        const brands = existingBrands(data);
+        const brands = registeredBrands(data);
         if (!name) throw new Error("Nama Campaign wajib diisi.");
         if (!brand || !brands.includes(brand)) throw new Error("Pilih Brand dari data yang tersedia.");
         const periodError = validateCampaignPeriod(startDate, endDate);
@@ -1218,8 +1218,12 @@ function existingBrands(data: AppData) {
   ].map((brand) => brand.trim()).filter(Boolean))).sort((left, right) => left.localeCompare(right, "id"));
 }
 
+function registeredBrands(data: AppData) {
+  return Array.from(new Set(data.brands.map((brand) => brand.name.trim()).filter(Boolean))).sort((left, right) => left.localeCompare(right, "id"));
+}
+
 function formFields(type: string, data: AppData, resetUser: User | null = null, identity: UserIdentity | null = null) {
-  if (type === "campaign") return <div className="form-stack campaign-create-fields"><Field label="Nama Campaign" name="name" required placeholder="Contoh: Grand Opening RUMA Purwokerto" /><SelectField label="Brand" name="brand" values={existingBrands(data)} required placeholder="Pilih brand" /><div className="campaign-form-group"><div><strong>Periode Campaign</strong><span>Opsional, dapat diatur nanti.</span></div><div className="two-fields"><Field label="Tanggal mulai" name="startDate" type="date" /><Field label="Tanggal selesai" name="endDate" type="date" /></div></div><div className="form-field"><label>Tujuan Singkat</label><textarea className="modal-input campaign-objective-input" name="objective" maxLength={280} placeholder="Apa tujuan utama campaign ini?" /></div><div className="campaign-create-note"><Icon name="info" size={15} /><span>Brief, KPI, promo, timeline, tugas, influencer, dan budget dapat dilengkapi melalui Campaign Workspace setelah dibuat.</span></div></div>;
+  if (type === "campaign") return <div className="form-stack campaign-create-fields"><Field label="Nama Campaign" name="name" required placeholder="Contoh: Grand Opening RUMA Purwokerto" /><SelectField label="Brand" name="brand" values={registeredBrands(data)} required placeholder="Pilih brand" /><div className="campaign-form-group"><div><strong>Periode Campaign</strong><span>Opsional, dapat diatur nanti.</span></div><div className="two-fields"><Field label="Tanggal mulai" name="startDate" type="date" /><Field label="Tanggal selesai" name="endDate" type="date" /></div></div><div className="form-field"><label>Tujuan Singkat</label><textarea className="modal-input campaign-objective-input" name="objective" maxLength={280} placeholder="Apa tujuan utama campaign ini?" /></div><div className="campaign-create-note"><Icon name="info" size={15} /><span>Brief, KPI, promo, timeline, tugas, influencer, dan budget dapat dilengkapi melalui Campaign Workspace setelah dibuat.</span></div></div>;
   if (type === "content") return <div className="form-stack"><Field label="Judul konten" name="title" required /><div className="two-fields"><SelectField label="Brand" name="brand" values={existingBrands(data)} /><SelectField label="Platform" name="platform" values={["Instagram", "Facebook", "Threads", "TikTok"]} /></div><Field label="Tanggal tayang" name="date" type="date" required defaultValue="2026-10-20" /><div className="form-field"><label>Caption / brief</label><textarea className="modal-input" name="caption" /></div></div>;
   if (type === "request") return <div className="form-stack"><Field label="Nama pengirim" name="sender" required /><div className="form-field"><label>Isi request / ide *</label><textarea className="modal-input" name="title" required /></div><div className="two-fields"><SelectField label="Brand" name="brand" values={existingBrands(data)} /><SelectField label="Prioritas" name="priority" values={["Sedang", "Tinggi", "Rendah"]} /></div></div>;
   if (type === "influencer") return <div className="form-stack"><Field label="Nama influencer" name="name" required /><div className="two-fields"><SelectField label="Platform" name="platform" values={["Instagram", "Facebook", "TikTok"]} /><Field label="Niche" name="niche" /></div><div className="two-fields"><Field label="Rate card" name="rate" type="number" /><Field label="Followers" name="followers" /></div></div>;
