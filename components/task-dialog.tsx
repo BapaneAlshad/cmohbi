@@ -22,7 +22,7 @@ export function TaskDialog({ data, task, initialCampaignId, onClose, onSave }: {
   const formRef = useRef<HTMLElement>(null);
   const closeRef = useRef(onClose); closeRef.current = onClose;
   const pendingRef = useRef(false);
-  const campaigns = data.campaigns.filter((item) => item.lifecycleStatus === "active" && item.brand === brand);
+  const campaigns = data.campaigns.filter((item) => item.lifecycleStatus === "active");
   const campaign = campaigns.find((item) => String(item.id) === campaignId);
   const phases = campaign?.timelineConfig?.phaseMode ? campaign.timelineConfig.phases : [];
 
@@ -58,12 +58,13 @@ export function TaskDialog({ data, task, initialCampaignId, onClose, onSave }: {
     <form className="form-stack" onSubmit={submit} aria-busy={pending}>
       <fieldset className="task-form-fields" disabled={pending}>
         <label className="form-field">Judul tugas *<input className="modal-input" name="title" required defaultValue={task?.title || ""} placeholder="Contoh: Finalisasi key visual" /></label>
-        <div className="two-fields"><label className="form-field">Brand *<select className="modal-input" aria-label="Brand" required value={brand} onChange={(event) => { setBrand(event.target.value); setCampaignId(""); setPhaseId(""); }}><option value="" disabled>Pilih brand</option>{data.brands.map((item) => <option key={String(item.id)} value={item.name}>{item.name}</option>)}</select></label><label className="form-field">Campaign<select className="modal-input" aria-label="Campaign" value={campaignId} onChange={(event) => {
+        <div className="two-fields"><label className="form-field">Brand *<select className="modal-input" aria-label="Brand" required value={brand} disabled={Boolean(campaignId)} onChange={(event) => { setBrand(event.target.value); setCampaignId(""); setPhaseId(""); }}><option value="" disabled>Pilih brand</option>{data.brands.map((item) => <option key={String(item.id)} value={item.name}>{item.name}</option>)}</select></label><label className="form-field">Campaign<select className="modal-input" aria-label="Campaign" value={campaignId} onChange={(event) => {
           const nextCampaignId = event.target.value;
-          const nextCampaign = data.campaigns.find((item) => String(item.id) === nextCampaignId && item.lifecycleStatus === "active" && item.brand === brand);
+          const nextCampaign = campaigns.find((item) => String(item.id) === nextCampaignId);
           const nextPhases = nextCampaign?.timelineConfig?.phaseMode ? nextCampaign.timelineConfig.phases : [];
           const firstPhase = nextPhases[0];
           setCampaignId(nextCampaignId);
+          setBrand(nextCampaign?.brand || brand);
           setPhaseId(firstPhase?.id || "");
           if (!task && firstPhase?.endDate) setDueDate(firstPhase.endDate);
         }}><option value="">Tanpa campaign</option>{campaigns.map((item) => <option value={String(item.id)} key={String(item.id)}>{item.name}</option>)}</select></label></div>
