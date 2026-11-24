@@ -9,6 +9,12 @@ export const influencerAccountPlatforms: InfluencerAccountPlatform[] = ["Instagr
 export const influencerCollaborationTypes: InfluencerCollaborationType[] = ["Influencer", "Barter Endorse"];
 export const influencerRateCardPresets = ["Paid Post", "Visit Instagram", "Visit TikTok", "Mirroring", "Lainnya"] as const;
 
+export function influencerRateCardPlatform(name: string): InfluencerAccountPlatform | "Lainnya" {
+  if (name.trim() === "Visit Instagram") return "Instagram";
+  if (name.trim() === "Visit TikTok") return "TikTok";
+  return "Lainnya";
+}
+
 export function legacyInfluencerNiches(value: string | null | undefined) {
   const normalized = String(value || "").toLowerCase();
   const matched = influencerNiches.filter((niche) => {

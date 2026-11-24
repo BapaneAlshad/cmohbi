@@ -1768,8 +1768,8 @@ body.dark-mode .platform-logo.tiktok, body.dark-mode .platform-badge.tiktok { ba
 .influencer-package-list { display: grid; gap: 9px; }
 .influencer-package-editor { display: grid; gap: 10px; padding: 11px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-subtle); }
 .influencer-package-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 11px; }
-.influencer-package-grid { display: grid; grid-template-columns: 1.1fr 1fr 1.2fr 1fr; gap: 9px; }
-.influencer-package-grid .influencer-package-details { grid-column: span 2; }
+.influencer-package-grid { display: grid; grid-template-columns: 1.1fr 1.4fr 1fr; gap: 9px; }
+.influencer-package-grid .influencer-package-details { grid-column: auto; }
 .danger-text { color: var(--coral) !important; }
 .influencer-master-table { min-width: 980px; }
 .influencer-number-column { width: 48px; min-width: 48px; color: var(--muted); font-size: 10px; font-variant-numeric: tabular-nums; text-align: center; }

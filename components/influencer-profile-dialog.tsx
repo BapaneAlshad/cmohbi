@@ -2,7 +2,7 @@
 
 import { useMemo, useState, type FormEvent } from "react";
 import type { Influencer, InfluencerProfileInput, InfluencerRateCard } from "@/lib/types";
-import { influencerNiches, influencerRateCardPresets, legacyInfluencerNiches, normalizeWhatsAppNumber } from "@/lib/influencer-profiles";
+import { influencerNiches, influencerRateCardPlatform, influencerRateCardPresets, legacyInfluencerNiches, normalizeWhatsAppNumber } from "@/lib/influencer-profiles";
 import { Icon } from "./ui";
 
 type Props = {
@@ -14,7 +14,7 @@ type Props = {
 type PackageDraft = InfluencerRateCard & { rowKey: string };
 
 function newPackage(): PackageDraft {
-  return { rowKey: crypto.randomUUID(), name: "", platform: "Instagram", details: "", amount: 0 };
+  return { rowKey: crypto.randomUUID(), name: "Mirroring", platform: "Lainnya", details: "", amount: 0 };
 }
 
 export function InfluencerProfileDialog({ initial, onClose, onSave }: Props) {
@@ -41,6 +41,7 @@ export function InfluencerProfileDialog({ initial, onClose, onSave }: Props) {
   const packageValueLabel = collaborationType === "Influencer" ? "Rate paket (Rp)" : "Estimasi nilai barter (Rp)";
   const title = initial ? "Edit data influencer" : "Tambah influencer";
   const activeAccounts = useMemo(() => accounts.filter((item) => item.username?.trim() || item.followers > 0), [accounts]);
+  const packageOptions = useMemo(() => Array.from(new Set([...influencerRateCardPresets, ...rateCards.map((item) => item.name).filter(Boolean)])), [rateCards]);
 
   const toggleNiche = (niche: string) => setNiches((current) => current.includes(niche) ? current.filter((item) => item !== niche) : [...current, niche]);
   const updateAccount = (platform: "Instagram" | "TikTok", patch: Partial<InfluencerProfileInput["accounts"][number]>) => {
@@ -62,7 +63,7 @@ export function InfluencerProfileDialog({ initial, onClose, onSave }: Props) {
       niches,
       customNiche,
       accounts: activeAccounts,
-      rateCards: rateCards.map(({ rowKey: _rowKey, ...item }) => item),
+      rateCards: rateCards.map(({ rowKey: _rowKey, ...item }) => ({ ...item, platform: influencerRateCardPlatform(item.name) })),
     };
     try {
       await onSave(input, initial?.id);
@@ -92,8 +93,8 @@ export function InfluencerProfileDialog({ initial, onClose, onSave }: Props) {
 
         <fieldset className="influencer-profile-fieldset"><legend>Paket rate card</legend><div className="influencer-package-list">{rateCards.map((item, index) => <article className="influencer-package-editor" key={item.rowKey}>
           <div className="influencer-package-heading"><strong>Paket {index + 1}</strong><button type="button" className="button button-ghost button-sm danger-text" onClick={() => setRateCards((current) => current.filter((entry) => entry.rowKey !== item.rowKey))} disabled={rateCards.length === 1 || saving} aria-label={`Hapus paket ${index + 1}`} title={rateCards.length === 1 ? "Minimal satu paket rate card" : "Hapus paket"}><Icon name="trash" size={14} />Hapus</button></div>
-          <div className="influencer-package-grid"><label>Nama paket<input className="modal-input" list="influencer-rate-card-presets" value={item.name} onChange={(event) => updatePackage(item.rowKey, { name: event.target.value })} maxLength={100} placeholder="Paid Post, Visit, Mirroring…" required /></label><label>Platform / layanan<select className="modal-input" value={item.platform} onChange={(event) => updatePackage(item.rowKey, { platform: event.target.value as InfluencerRateCard["platform"] })}><option>Instagram</option><option>TikTok</option><option>Lainnya</option></select></label><label className="influencer-package-details">Detail deliverable<textarea className="modal-input" rows={2} value={item.details} onChange={(event) => updatePackage(item.rowKey, { details: event.target.value })} maxLength={2000} placeholder="Contoh: 1 Reels + 3 story" /></label><label>{packageValueLabel}<input className="modal-input" type="number" min="0" max="999999999999" step="1" value={item.amount} onChange={(event) => updatePackage(item.rowKey, { amount: Number(event.target.value) })} required /></label></div>
-        </article>)}</div><datalist id="influencer-rate-card-presets">{influencerRateCardPresets.map((preset) => <option value={preset} key={preset} />)}</datalist><button type="button" className="button button-soft button-sm" onClick={() => setRateCards((current) => [...current, newPackage()])} disabled={rateCards.length >= 30 || saving}><Icon name="plus" size={14} />Tambah paket</button></fieldset>
+          <div className="influencer-package-grid"><label>Nama paket<select className="modal-input" value={item.name || "Mirroring"} onChange={(event) => updatePackage(item.rowKey, { name: event.target.value, platform: influencerRateCardPlatform(event.target.value) })} required>{packageOptions.map((option) => <option value={option} key={option}>{option}</option>)}</select></label><label className="influencer-package-details">Detail deliverable<textarea className="modal-input" rows={2} value={item.details} onChange={(event) => updatePackage(item.rowKey, { details: event.target.value })} maxLength={2000} placeholder="Contoh: 1 Reels + 3 story" /></label><label>{packageValueLabel}<input className="modal-input" type="number" min="0" max="999999999999" step="1" value={item.amount} onChange={(event) => updatePackage(item.rowKey, { amount: Number(event.target.value) })} required /></label></div>
+        </article>)}</div><button type="button" className="button button-soft button-sm" onClick={() => setRateCards((current) => [...current, newPackage()])} disabled={rateCards.length >= 30 || saving}><Icon name="plus" size={14} />Tambah paket</button></fieldset>
 
         {error && <div className="campaign-form-error" role="alert">{error}</div>}
         <div className="modal-actions"><button type="button" className="button button-ghost" onClick={onClose} disabled={saving}>Batal</button><button type="submit" className="button button-primary" disabled={saving}>{saving ? "Menyimpan…" : "Simpan data"}</button></div>

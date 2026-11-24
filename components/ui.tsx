@@ -7,7 +7,7 @@ import {
   Download, Edit3, ExternalLink, Eye, Film, Filter, Handshake, Home, Image as ImageIcon,
   Archive, ChartNoAxesGantt, Info, Instagram, Layers3, LayoutGrid, LayoutPanelLeft, Link2, LockKeyhole, LogOut, Menu, MessageSquare,
   Megaphone, Moon, MoreHorizontal, Paperclip, Pin, PinOff, Plus, Reply, Search, Send, Share2,
-  RotateCcw, Settings, Sparkles, Star, Sun, Target, Trash2, Upload, Users, X, type LucideIcon,
+  Repeat2, RotateCcw, Settings, Sparkles, Star, Sun, Target, Trash2, Upload, Users, X, type LucideIcon,
 } from "lucide-react";
 
 const icons: Record<string, LucideIcon> = {
@@ -21,7 +21,7 @@ const icons: Record<string, LucideIcon> = {
   message: MessageSquare, moon: Moon, "more-horizontal": MoreHorizontal,
   panel: LayoutPanelLeft, paperclip: Paperclip, pin: Pin, "pin-off": PinOff, plus: Plus, reply: Reply,
   search: Search, send: Send, share: Share2, settings: Settings, sparkles: Sparkles, sun: Sun, upload: Upload,
-  restore: RotateCcw, target: Target, trash: Trash2, users: Users, wallet: CircleDollarSign, clock: Clock3,
+  repeat: Repeat2, restore: RotateCcw, target: Target, trash: Trash2, users: Users, wallet: CircleDollarSign, clock: Clock3,
   grid: LayoutGrid, timeline: ChartNoAxesGantt, lock: LockKeyhole,
 };
 
