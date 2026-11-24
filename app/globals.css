@@ -1789,7 +1789,9 @@ body.dark-mode .platform-logo.tiktok, body.dark-mode .platform-badge.tiktok { ba
 .influencer-account-link > a:hover { color: var(--accent); text-decoration: underline; }
 .influencer-account-link > small { color: var(--muted); font-size: 9px; }
 .influencer-account-link .muted-cell { grid-column: 2; font-size: 9px; }
-.influencer-whatsapp-link { display: inline-flex; align-items: center; gap: 5px; margin-top: 3px; color: #16804a; font-size: 10px; font-weight: 550; }
+.influencer-person-cell { min-width: 0; display: grid; justify-items: start; gap: 3px; }
+.influencer-person-cell .table-person { min-width: 0; }
+.influencer-whatsapp-link { display: inline-flex; align-items: center; gap: 5px; margin-top: 0; color: #16804a; font-size: 10px; font-weight: 550; }
 .influencer-whatsapp-link:hover { text-decoration: underline; }
 .influencer-rate-card-summary { display: grid; gap: 4px; min-width: 150px; }
 .influencer-rate-card-summary > small, .influencer-rate-card-summary > span { color: var(--muted); font-size: 9px; }
