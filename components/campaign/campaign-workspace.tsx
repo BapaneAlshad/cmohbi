@@ -578,21 +578,23 @@ function BriefPromoTab({ campaign, presentation, canEdit, pinPending, onToggleIn
   return <div className="campaign-tab-stack">
     <div className="campaign-section-intro"><div><h2>Brief campaign</h2></div></div>
     <div className="campaign-brief-grid">
-      <div className="campaign-tab-stack">
-        <section className="card">
-          <CampaignSectionHeader icon="book" title="Brief utama" action={canEdit ? <button className="button button-soft button-sm" onClick={onEditBrief}><Icon name="edit" size={12} />{hasBrief ? "Edit brief" : "Lengkapi brief"}</button> : undefined} />
-          {hasBrief ? <div className="campaign-brief-content"><div className="campaign-subheading">TAGLINE</div><h3>{presentation.tagline || "Belum ditentukan"}</h3><div className="campaign-subheading">BIG MESSAGE</div><h4>{presentation.bigMessage || "Belum ditentukan"}</h4></div> : <EmptyCampaignState icon="book" title="Brief utama belum lengkap" description={hasStoredKpi ? `Target existing “${campaign.kpi}” tetap tersedia, tetapi belum ada tagline atau big message.` : "Belum ada tagline atau big message."} action={canEdit ? <button className="button button-primary button-sm" onClick={onEditBrief}><Icon name="plus" size={12} />Tulis brief</button> : undefined} />}
-        </section>
+      <div className="campaign-tab-stack campaign-brief-main">
+        <div className="campaign-brief-top">
+          <section className="card">
+            <CampaignSectionHeader icon="book" title="Brief utama" action={canEdit ? <button className="button button-soft button-sm" onClick={onEditBrief}><Icon name="edit" size={12} />{hasBrief ? "Edit brief" : "Lengkapi brief"}</button> : undefined} />
+            {hasBrief ? <div className="campaign-brief-content"><div className="campaign-subheading">TAGLINE</div><h3>{presentation.tagline || "Belum ditentukan"}</h3><div className="campaign-subheading">BIG MESSAGE</div><h4>{presentation.bigMessage || "Belum ditentukan"}</h4></div> : <EmptyCampaignState icon="book" title="Brief utama belum lengkap" description={hasStoredKpi ? `Target existing “${campaign.kpi}” tetap tersedia, tetapi belum ada tagline atau big message.` : "Belum ada tagline atau big message."} action={canEdit ? <button className="button button-primary button-sm" onClick={onEditBrief}><Icon name="plus" size={12} />Tulis brief</button> : undefined} />}
+          </section>
+          <section className="card">
+            <CampaignSectionHeader icon="pin" title="Catatan penting" action={canEdit && presentation.instructions.trim() ? <button className="button button-soft button-sm" type="button" onClick={onToggleInstructionsPin} disabled={pinPending} aria-pressed={presentation.instructionsPinned}><Icon name={presentation.instructionsPinned ? "pin-off" : "pin"} size={12} />{pinPending ? "Menyimpan…" : presentation.instructionsPinned ? "Lepas pin" : "Pin ke catatan penting"}</button> : undefined} />
+            {presentation.instructions ? <div className="campaign-important-note"><Icon name="alert" size={15} /><p>{presentation.instructions}</p></div> : <EmptyCampaignState icon="pin" title="Belum ada instruksi khusus" description="Gunakan bagian ini untuk syarat promo, batasan copy, atau detail yang wajib dikonfirmasi." />}
+            {presentation.instructionsPinned && presentation.instructions.trim() && <small className="campaign-instructions-pin-state">Tersinkron ke Catatan penting pada Diskusi dan Dashboard anggota Campaign.</small>}
+          </section>
+        </div>
         <section className="card">
         <CampaignSectionHeader icon="image" title="Referensi kreatif" description="Link gambar, moodboard, atau dokumen acuan." action={canEdit ? <button className="button button-soft button-sm" onClick={onAddReference}><Icon name="plus" size={12} />Tambah referensi</button> : undefined} />
         {referenceSync === "loading" && <IntegrationNotice>Memuat referensi tersimpan…</IntegrationNotice>}
         {referenceSync === "error" && <IntegrationNotice tone="amber">Referensi tersimpan belum dapat dimuat. Pastikan migration Campaign Reference sudah dijalankan.</IntegrationNotice>}
           {presentation.references.length ? <div className="campaign-reference-grid">{presentation.references.map((reference) => <CreativeReferenceCard key={reference.id} reference={reference} onDelete={canEdit ? () => onDeleteReference(reference) : undefined} />)}</div> : <EmptyCampaignState icon="image" title="Belum ada referensi" description="Tambahkan tautan moodboard atau dokumen agar eksekusi kreatif lebih konsisten." />}
-        </section>
-        <section className="card">
-          <CampaignSectionHeader icon="pin" title="Catatan penting" action={canEdit && presentation.instructions.trim() ? <button className="button button-soft button-sm" type="button" onClick={onToggleInstructionsPin} disabled={pinPending} aria-pressed={presentation.instructionsPinned}><Icon name={presentation.instructionsPinned ? "pin-off" : "pin"} size={12} />{pinPending ? "Menyimpan…" : presentation.instructionsPinned ? "Lepas pin" : "Pin ke catatan penting"}</button> : undefined} />
-          {presentation.instructions ? <div className="campaign-important-note"><Icon name="alert" size={15} /><p>{presentation.instructions}</p></div> : <EmptyCampaignState icon="pin" title="Belum ada instruksi khusus" description="Gunakan bagian ini untuk syarat promo, batasan copy, atau detail yang wajib dikonfirmasi." />}
-          {presentation.instructionsPinned && presentation.instructions.trim() && <small className="campaign-instructions-pin-state">Tersinkron ke Catatan penting pada Diskusi dan Dashboard anggota Campaign.</small>}
         </section>
       </div>
 

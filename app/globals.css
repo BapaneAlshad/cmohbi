@@ -672,6 +672,8 @@ body.dark-mode .campaign-archived-banner { color: #a8bdd1; background: #26313c; 
 .campaign-full-button { width: 100%; margin-top: 11px; }
 
 .campaign-brief-grid { display: grid; grid-template-columns: minmax(0, 1.65fr) minmax(300px, .75fr); gap: 16px; }
+.campaign-brief-top { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(260px, .85fr); gap: 16px; }
+.campaign-brief-top > .card { min-width: 0; }
 .campaign-brief-content h3 { margin: 7px 0 18px; font-size: 22px; letter-spacing: -.04em; }
 .campaign-brief-content h4 { max-width: 760px; margin: 7px 0 18px; font-size: 16px; line-height: 1.6; white-space: pre-line; overflow-wrap: anywhere; }
 .campaign-brief-content > p { margin: 7px 0 0; color: var(--muted-dark); font-size: 12px; line-height: 1.8; }
@@ -1500,7 +1502,7 @@ body.dark-mode .platform-logo.tiktok, body.dark-mode .platform-badge.tiktok { ba
   .stats-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .dashboard-grid, .dashboard-bottom, .calendar-layout, .request-layout, .finance-layout, .analytics-grid, .account-grid, .influencer-schedule-layout { grid-template-columns: 1fr; }
   .campaign-grid { grid-template-columns: 1fr; }
-  .campaign-overview-grid, .campaign-brief-grid, .campaign-content-layout, .campaign-finance-grid, .campaign-discussion-grid, .campaign-phase-layout { grid-template-columns: 1fr; }
+  .campaign-overview-grid, .campaign-brief-grid, .campaign-content-layout, .campaign-finance-grid, .campaign-discussion-grid, .campaign-phase-layout, .campaign-brief-top { grid-template-columns: 1fr; }
   .brand-page-layout, .brand-info-grid { grid-template-columns: 1fr; }
   .brand-directory { position: static; }
   .campaign-phase-sidebar, .campaign-promo-column { align-self: stretch; }
