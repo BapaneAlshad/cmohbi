@@ -204,7 +204,7 @@ export function BrandView({ data, identity, navigate, notify, setData, uploadMed
   const marginAverage = selectedBrand.menus.length ? selectedBrand.menus.reduce((sum, menu) => sum + marginPercent(menu), 0) / selectedBrand.menus.length : 0;
 
   return <>
-    <PageHeading kicker="Workspace / Brand" title="Pusat brand" description="Satu sumber informasi untuk menjaga campaign, tugas, dan pengeluaran tetap sesuai identitas brand." action={canEdit ? <PrimaryAction onClick={() => setBrandDialog(selectedBrand)}>Tambah brand</PrimaryAction> : undefined} />
+    <PageHeading kicker="Workspace / Brand" title="Pusat brand" description="Satu sumber informasi untuk menjaga campaign, tugas, dan pengeluaran tetap sesuai identitas brand." action={canEdit ? <PrimaryAction onClick={() => setBrandDialog(null)}>Tambah brand</PrimaryAction> : undefined} />
     <div className="brand-page-layout">
       <aside className="brand-directory card">
         <div className="brand-directory-head"><div><h2>Daftar brand</h2><span>{brands.length} brand tersimpan</span></div>{canEdit && <button className="icon-button" onClick={() => setBrandDialog(null)} aria-label="Tambah brand"><Icon name="plus" size={15} /></button>}</div>
