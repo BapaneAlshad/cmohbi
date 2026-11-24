@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import type { AdminDashboardNote, AppData, CampaignDiscussionNote, CampaignExpense, CampaignExpenseInput, CampaignInfluencerBookingPatch, CampaignInfluencerTheme, CampaignInfluencerThemeInput, CampaignKpiInput, CampaignTimelinePhase, ContentItem, EntityId, Influencer, InfluencerPaymentStatus, InfluencerProfileInput, InfluencerSchedule, NotificationItem, Task, TaskDraft, TaskPatch, Transaction, User, UserIdentity, ViewName } from "@/lib/types";
 import { allowedTaskStatuses, applyStatusRequest, filteredBoardTasks, isTaskManager } from "@/lib/task-workflow";
 import { createTaskRecord, decideTaskStatus as persistStatusDecision, deleteTaskRecord, loadTaskBoard, requestTaskStatus } from "@/lib/supabase/task-board-data";
@@ -68,6 +69,7 @@ export function AppShell() {
   const [view, setView] = useState<ViewName>("dashboard");
   const [data, setData] = useState<AppData>(emptyWorkspaceData);
   const [theme, setTheme] = useState<"light" | "dark">("light");
+  const themeTransitionRunning = useRef(false);
   const [collapsed, setCollapsed] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [editingTaskId, setEditingTaskId] = useState<EntityId | null>(null);
@@ -251,6 +253,44 @@ export function AppShell() {
     document.body.classList.toggle("dark-mode", theme === "dark");
     window.localStorage.setItem("ngapaya-theme", theme);
   }, [theme]);
+
+  const toggleTheme = (button: HTMLButtonElement) => {
+    if (themeTransitionRunning.current) return;
+    const nextTheme = theme === "dark" ? "light" : "dark";
+    const updateTheme = () => {
+      document.body.classList.toggle("dark-mode", nextTheme === "dark");
+      flushSync(() => setTheme(nextTheme));
+    };
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      updateTheme();
+      return;
+    }
+    if (!document.startViewTransition) {
+      document.documentElement.classList.add("theme-fallback");
+      updateTheme();
+      window.setTimeout(() => document.documentElement.classList.remove("theme-fallback"), 400);
+      return;
+    }
+
+    themeTransitionRunning.current = true;
+    const rect = button.getBoundingClientRect();
+    const x = rect.left + rect.width / 2;
+    const y = rect.top + rect.height / 2;
+    const radius = Math.hypot(Math.max(x, window.innerWidth - x), Math.max(y, window.innerHeight - y));
+    document.documentElement.classList.add("theme-transition");
+    const transition = document.startViewTransition(updateTheme);
+    void transition.ready.then(() => {
+      document.documentElement.animate(
+        { clipPath: [`circle(0px at ${x}px ${y}px)`, `circle(${radius}px at ${x}px ${y}px)`] },
+        { duration: 650, easing: "cubic-bezier(.22, 1, .36, 1)", pseudoElement: "::view-transition-new(root)" },
+      );
+    }).catch(() => { /* The theme has already changed if the transition was skipped. */ });
+    const finishTransition = () => {
+      themeTransitionRunning.current = false;
+      document.documentElement.classList.remove("theme-transition");
+    };
+    void transition.finished.then(finishTransition, finishTransition);
+  };
 
   useEffect(() => {
     document.body.classList.toggle("sidebar-collapsed", collapsed);
@@ -1065,7 +1105,7 @@ export function AppShell() {
       })}</nav>
     </aside>
     <button className={`sidebar-backdrop ${sidebarOpen ? "visible" : ""}`} onClick={() => setSidebarOpen(false)} aria-label="Tutup menu" />
-    <main className="main-area"><header className="topbar"><div className="topbar-left"><button className="icon-button menu-toggle" onClick={() => setSidebarOpen(true)} aria-label="Buka menu"><Icon name="menu" /></button><div className="crumbs"><span>Workspace</span><b>/</b><strong>{titles[currentView]}</strong></div></div><div className="topbar-actions"><label className="search-box"><Icon name="search" /><input type="search" placeholder="Cari apa saja..." aria-label="Cari di workspace" onKeyDown={(event) => { if (event.key === "Enter") notify(`Pencarian “${event.currentTarget.value}” siap digunakan.`); }} /></label><button className="icon-button theme-button" onClick={() => setTheme(theme === "dark" ? "light" : "dark")} aria-label="Ubah tema"><Icon name={theme === "dark" ? "sun" : "moon"} /></button><div className="notification-anchor"><button className={`icon-button notification-button ${unreadNotifications(notifications).length ? "has-unread" : ""}`} onClick={() => { setNotificationOpen((open) => !open); if (authMode === "live") void refreshNotifications(); }} aria-label={unreadNotifications(notifications).length ? `Notifikasi, ${unreadNotifications(notifications).length} belum dibaca` : "Notifikasi"}><Icon name="bell" /><i aria-hidden="true" /></button>{notificationOpen && <NotificationPanel notifications={notifications} onOpen={(notification) => void markNotificationRead(notification)} onMarkAll={() => void markAllNotificationsRead()} />}</div><button className="top-profile" onClick={() => navigate("account")}><Avatar name={identity.name} src={identity.avatarUrl} /><span className="top-profile-copy"><strong>{identity.name}</strong><small>{identity.role}</small></span><span className="chevron">⌄</span></button></div></header>
+    <main className="main-area"><header className="topbar"><div className="topbar-left"><button className="icon-button menu-toggle" onClick={() => setSidebarOpen(true)} aria-label="Buka menu"><Icon name="menu" /></button><div className="crumbs"><span>Workspace</span><b>/</b><strong>{titles[currentView]}</strong></div></div><div className="topbar-actions"><label className="search-box"><Icon name="search" /><input type="search" placeholder="Cari apa saja..." aria-label="Cari di workspace" onKeyDown={(event) => { if (event.key === "Enter") notify(`Pencarian “${event.currentTarget.value}” siap digunakan.`); }} /></label><button className="icon-button theme-button" onClick={(event) => toggleTheme(event.currentTarget)} aria-label={theme === "dark" ? "Aktifkan mode terang" : "Aktifkan mode gelap"}><Icon name={theme === "dark" ? "sun" : "moon"} /></button><div className="notification-anchor"><button className={`icon-button notification-button ${unreadNotifications(notifications).length ? "has-unread" : ""}`} onClick={() => { setNotificationOpen((open) => !open); if (authMode === "live") void refreshNotifications(); }} aria-label={unreadNotifications(notifications).length ? `Notifikasi, ${unreadNotifications(notifications).length} belum dibaca` : "Notifikasi"}><Icon name="bell" /><i aria-hidden="true" /></button>{notificationOpen && <NotificationPanel notifications={notifications} onOpen={(notification) => void markNotificationRead(notification)} onMarkAll={() => void markAllNotificationsRead()} />}</div><button className="top-profile" onClick={() => navigate("account")}><Avatar name={identity.name} src={identity.avatarUrl} /><span className="top-profile-copy"><strong>{identity.name}</strong><small>{identity.role}</small></span><span className="chevron">⌄</span></button></div></header>
       <div className="page-content">{sessionError && <div className="task-board-error" role="alert">{sessionError}<button type="button" className="button button-soft button-sm" onClick={() => window.location.reload()}>Coba lagi</button></div>}{currentView === "dashboard" && <DashboardView {...common} />}{currentView === "campaigns" && <CampaignsView {...common} />}{currentView === "brands" && <BrandView {...common} />}{currentView === "todo" && <TodoView {...common} />}{currentView === "calendar" && <CalendarView {...common} />}{(currentView === "tools-lan" || currentView === "tools-drive" || currentView === "tools-settings") && <ToolsMediaView mode={currentView === "tools-lan" ? "lan" : currentView === "tools-drive" ? "drive" : "settings"} workspaceId={liveContext?.workspaceId} identity={identity} supabaseClient={supabase} liveMode={authMode === "live"} notify={notify} getAccessToken={getAccessToken} />}{currentView === "requests" && <RequestsView {...common} />}{currentView === "partners" && <PartnersView {...common} />}{currentView === "influencers" && <InfluencersView {...common} />}{currentView === "analytics" && <AnalyticsView {...common} />}{currentView === "social-hub" && <SocialHubView {...common} />}{currentView === "account" && <AccountView {...common} />}{currentView === "users" && <UserManagementView users={data.users} identity={identity} onSave={saveManagedUser} onResetPin={resetPin} onUploadAvatar={uploadUserAvatar} />}{currentView === "admin-notes" && <AdminNotesView notes={data.adminDashboardNotes || []} users={data.users} identity={identity} onSave={saveAdminNote} onDelete={deleteAdminNote} />}</div>
     </main>
     <div className={`toast ${toast ? "show" : ""}`} role="status">{toast?.message}{toast?.action && <button type="button" onClick={() => { toast.action?.(); setToast(null); }}>{toast.actionLabel}</button>}</div>

@@ -151,6 +151,13 @@ body.dark-mode .avatar { border-color: var(--line); }
 .icon-button { width: 36px; height: 36px; display: grid; place-items: center; flex: 0 0 auto; color: var(--muted-dark); background: transparent; border: 1px solid transparent; border-radius: 9px; transition: color var(--ease), background var(--ease), border-color var(--ease); }
 .icon-button:hover { color: var(--ink); background: var(--surface-subtle); border-color: var(--line); }
 .theme-button { color: var(--muted-dark); }
+.theme-button .ui-icon { transform-origin: center; }
+.theme-transition .theme-button .ui-icon, .theme-fallback .theme-button .ui-icon { animation: theme-icon-enter 460ms cubic-bezier(.2,1.5,.4,1) both; }
+@keyframes theme-icon-enter { from { opacity: .3; transform: rotate(-65deg) scale(.6); } to { opacity: 1; transform: rotate(0) scale(1); } }
+html.theme-transition::view-transition-image-pair(root) { isolation: auto; }
+html.theme-transition::view-transition-old(root), html.theme-transition::view-transition-new(root) { animation: none; mix-blend-mode: normal; }
+html.theme-fallback body, html.theme-fallback .sidebar, html.theme-fallback .topbar, html.theme-fallback .main-area, html.theme-fallback .card, html.theme-fallback .nav-item, html.theme-fallback .task-column { transition: background-color 380ms ease, color 380ms ease, border-color 380ms ease; }
+@media (prefers-reduced-motion: reduce) { .theme-transition .theme-button .ui-icon, .theme-fallback .theme-button .ui-icon { animation: none; } }
 .close-sidebar { display: none; }
 
 body.sidebar-collapsed .sidebar { width: 78px; padding-inline: 10px; }
