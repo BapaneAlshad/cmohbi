@@ -8,6 +8,7 @@
     "start": "next start --hostname 0.0.0.0 -p 4173",
     "typecheck": "tsc --noEmit",
     "supabase:check": "node --env-file-if-exists=.env.local scripts/check-supabase.mjs",
+    "sync:hermes-memory": "node scripts/sync-hermes-marketing-memory.mjs",
     "test": "node --no-warnings --experimental-strip-types --test tests/*.test.mts"
   },
   "dependencies": {
@@ -17,7 +18,7 @@
     "@supabase/supabase-js": "2.117.3",
     "google-auth-library": "^11.3.4",
     "lucide-react": "^0.468.0",
-    "next": "16.4.4",
+    "next": "16.4.6",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
     "recharts": "^3.2.1"

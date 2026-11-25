@@ -4,6 +4,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { WorkspaceRole, AppData } from "@/lib/types";
 import { loadWorkspaceData } from "@/lib/supabase/workspace-data";
 import { emptyWorkspaceData } from "@/lib/production-policy";
+import { APPROVED_OBSIDIAN_MARKETING_PATHS, filterMarketingMemoryDocuments } from "@/lib/hermes-memory";
 
 const MAX_CONTEXT_CHARS = 36_000;
 
@@ -17,7 +18,12 @@ function cleanDate(value: unknown) {
 
 function truncateJson(value: unknown) {
   const json = JSON.stringify(value);
-  return json.length <= MAX_CONTEXT_CHARS ? json : `${json.slice(0, MAX_CONTEXT_CHARS)}\n...[konteks dipotong]`;
+  if (json.length <= MAX_CONTEXT_CHARS) return json;
+  let partial = json;
+  while (JSON.stringify({ truncated: true, partialContext: partial }).length > MAX_CONTEXT_CHARS) {
+    partial = partial.slice(0, Math.floor(partial.length * 0.9));
+  }
+  return JSON.stringify({ truncated: true, partialContext: partial });
 }
 
 function safeCampaigns(data: AppData, includeAmounts: boolean) {
@@ -137,10 +143,26 @@ export async function buildHermesMarketingContext(
   email: string,
 ) {
   const data = await loadWorkspaceData(client, workspaceId, emptyWorkspaceData(), email);
+  const { data: memoryRows, error: memoryError } = await client
+    .from("hermes_marketing_memory")
+    .select("source_path,title,content,updated_at")
+    .eq("workspace_id", workspaceId)
+    .eq("scope", "marketing")
+    .in("source_path", [...APPROVED_OBSIDIAN_MARKETING_PATHS])
+    .order("updated_at", { ascending: false })
+    .limit(APPROVED_OBSIDIAN_MARKETING_PATHS.length);
+  if (memoryError) throw memoryError;
+  const obsidianMarketingMemory = filterMarketingMemoryDocuments(memoryRows);
   const includeAmounts = role === "owner" || role === "admin";
   const context = {
     source: "Ngapaya marketing workspace",
     policy: "Gunakan hanya data berikut untuk menjawab pertanyaan.",
+    obsidianMarketingMemory: obsidianMarketingMemory.map((document) => ({
+      source: document.sourcePath,
+      title: document.title,
+      updatedAt: document.updatedAt,
+      content: document.content,
+    })),
     campaigns: safeCampaigns(data, includeAmounts),
     brands: safeBrands(data, includeAmounts),
     tasks: safeTasks(data),
