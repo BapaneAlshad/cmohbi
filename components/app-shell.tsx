@@ -40,6 +40,7 @@ import { DevelopmentPaywallDialog } from "./development-paywall-dialog";
 import { deleteAdminDashboardNote as persistAdminNoteDelete, persistAdminDashboardNote, persistCampaignMembers, persistCampaignNote, persistCampaignNotePin } from "@/lib/supabase/campaign-dashboard-data";
 import { isDevelopmentMenuLocked } from "@/lib/development-menus";
 import { ToolsMediaView } from "./tools-media";
+import { HermesChat } from "./hermes-chat";
 
 
 const operationalSnapshot = (value: AppData) => JSON.stringify([value.brands, value.content, value.requests, value.influencers, value.transactions, value.socialInbox]);
@@ -1112,6 +1113,7 @@ export function AppShell() {
     {modal === "task" && isTaskManager(identity) && <TaskDialog key={`${editingTaskId ?? "new"}-${newTaskCampaignId ?? "none"}`} data={data} task={editingTaskId == null ? null : data.tasks.find((task) => String(task.id) === String(editingTaskId))} initialCampaignId={newTaskCampaignId} onClose={closeModal} onSave={saveTask} />}
     {modal && modal !== "task" && (modal !== "campaign" || isTaskManager(identity)) && <AppModal createCampaignRecord={createCampaignRecord} type={modal} data={data} close={closeModal} identity={identity} notify={notify} resetPin={resetPin} resetUser={resetUser} changePin={changePin} createUser={createUser} setData={setData} onCampaignCreated={(campaignId) => { setRequestedCampaignId(campaignId); setView("campaigns"); }} />}
     {developmentPaywallOpen && !canManageUsers(identity) && <DevelopmentPaywallDialog onClose={() => setDevelopmentPaywallOpen(false)} />}
+    {authMode === "live" && liveContext && <HermesChat identity={identity} getAccessToken={getAccessToken} />}
   </div>;
 }
 
