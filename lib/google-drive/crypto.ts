@@ -18,6 +18,15 @@ function derivedKey(purpose: string) {
   return Buffer.from(hkdfSync("sha256", masterKey(), Buffer.from("ngapaya-google-drive"), Buffer.from(purpose), 32));
 }
 
+function decodeBase64Url(value: string, label: string) {
+  if (!/^[A-Za-z0-9_-]+$/.test(value)) throw new Error(`${label} terenkripsi tidak valid.`);
+  const decoded = Buffer.from(value, "base64url");
+  // Reject alternate encodings that decode to the same bytes. Without this
+  // check, changing unused padding bits could bypass tamper detection.
+  if (decoded.toString("base64url") !== value) throw new Error(`${label} terenkripsi tidak valid.`);
+  return decoded;
+}
+
 export function encryptRefreshToken(refreshToken: string) {
   if (!refreshToken) throw new Error("Refresh token Google kosong.");
   const iv = randomBytes(12);
@@ -29,9 +38,9 @@ export function encryptRefreshToken(refreshToken: string) {
 export function decryptRefreshToken(value: string) {
   const [version, ivValue, tagValue, encryptedValue] = value.split(".");
   if (version !== "v1" || !ivValue || !tagValue || !encryptedValue) throw new Error("Format refresh token terenkripsi tidak valid.");
-  const decipher = createDecipheriv("aes-256-gcm", derivedKey("refresh-token-v1"), Buffer.from(ivValue, "base64url"));
-  decipher.setAuthTag(Buffer.from(tagValue, "base64url"));
-  return Buffer.concat([decipher.update(Buffer.from(encryptedValue, "base64url")), decipher.final()]).toString("utf8");
+  const decipher = createDecipheriv("aes-256-gcm", derivedKey("refresh-token-v1"), decodeBase64Url(ivValue, "IV"));
+  decipher.setAuthTag(decodeBase64Url(tagValue, "Tag autentikasi"));
+  return Buffer.concat([decipher.update(decodeBase64Url(encryptedValue, "Token")), decipher.final()]).toString("utf8");
 }
 
 export type SignedPayload = Record<string, unknown> & { exp: number };
