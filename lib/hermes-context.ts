@@ -5,6 +5,7 @@ import type { WorkspaceRole, AppData } from "@/lib/types";
 import { loadWorkspaceData } from "@/lib/supabase/workspace-data";
 import { emptyWorkspaceData } from "@/lib/production-policy";
 import { APPROVED_OBSIDIAN_MARKETING_PATHS, filterMarketingMemoryDocuments } from "@/lib/hermes-memory";
+import { buildHermesTaskContext } from "@/lib/hermes-task-context";
 
 const MAX_CONTEXT_CHARS = 36_000;
 
@@ -68,19 +69,6 @@ function safeBrands(data: AppData, includeAmounts: boolean) {
   }));
 }
 
-function safeTasks(data: AppData) {
-  return data.tasks.map((task) => ({
-    id: task.id,
-    title: cleanText(task.title, 180),
-    brand: cleanText(task.brand, 100),
-    campaignId: task.campaign,
-    dueDate: cleanDate(task.dueDate || task.due),
-    status: task.status,
-    priority: cleanText(task.priority, 40),
-    contentType: task.contentCalendarType || null,
-  }));
-}
-
 function safeContent(data: AppData) {
   return data.content.map((item) => ({
     id: item.id,
@@ -141,8 +129,10 @@ export async function buildHermesMarketingContext(
   workspaceId: string,
   role: WorkspaceRole,
   email: string,
+  currentUserId: string,
 ) {
   const data = await loadWorkspaceData(client, workspaceId, emptyWorkspaceData(), email);
+  const taskContext = buildHermesTaskContext(data, currentUserId);
   let obsidianMarketingMemory = filterMarketingMemoryDocuments([]);
   if (APPROVED_OBSIDIAN_MARKETING_PATHS.length > 0) {
     const { data: memoryRows, error: memoryError } = await client
@@ -160,6 +150,7 @@ export async function buildHermesMarketingContext(
   const context = {
     source: "Ngapaya marketing workspace",
     policy: "Gunakan hanya data berikut untuk menjawab pertanyaan.",
+    currentUser: taskContext.currentUser,
     obsidianMarketingMemory: obsidianMarketingMemory.map((document) => ({
       source: document.sourcePath,
       title: document.title,
@@ -168,7 +159,7 @@ export async function buildHermesMarketingContext(
     })),
     campaigns: safeCampaigns(data, includeAmounts),
     brands: safeBrands(data, includeAmounts),
-    tasks: safeTasks(data),
+    tasks: taskContext.tasks,
     contentCalendar: safeContent(data),
     requests: safeRequests(data),
     influencers: safeInfluencers(data, includeAmounts),
