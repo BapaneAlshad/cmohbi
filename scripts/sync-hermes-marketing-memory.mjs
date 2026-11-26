@@ -1,19 +1,12 @@
 import { readFile, realpath } from "node:fs/promises";
 import { resolve, relative, sep } from "node:path";
 
-const allowedNotes = [
-  ["Business/Brief-Konten-Opening-Sukho.md", "Sukho Ramen — Opening Content Brief"],
-  ["Business/Brief_Konten_Influencer_Sukho_Ramen.md", "Sukho Ramen — Influencer Content Brief"],
-];
+// Keep empty until source notes for Ngapaya's company brands are explicitly approved.
+const allowedNotes = [];
 const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
 const serviceKey = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
 const vaultPath = resolve(process.env.OBSIDIAN_VAULT_PATH || "/home/ubuntu/obsidian-vault");
 const workspaceSlug = process.env.HERMES_MEMORY_WORKSPACE_SLUG || "ngapaya-hbi";
-
-if (!supabaseUrl || !serviceKey) {
-  console.error("Missing SUPABASE_URL/NEXT_PUBLIC_SUPABASE_URL or service-role key in environment.");
-  process.exit(1);
-}
 
 async function api(path, init = {}) {
   const response = await fetch(new URL(`/rest/v1/${path}`, supabaseUrl), {
@@ -30,6 +23,13 @@ async function api(path, init = {}) {
 }
 
 async function main() {
+  if (allowedNotes.length === 0) {
+    console.log("No Obsidian marketing notes are approved; nothing synced.");
+    return;
+  }
+  if (!supabaseUrl || !serviceKey) {
+    throw new Error("Missing SUPABASE_URL/NEXT_PUBLIC_SUPABASE_URL or service-role key in environment.");
+  }
   const workspaceResponse = await api(`workspaces?select=id&slug=eq.${encodeURIComponent(workspaceSlug)}&limit=2`);
   const workspaces = await workspaceResponse.json();
   if (!Array.isArray(workspaces) || workspaces.length !== 1 || !workspaces[0]?.id) {

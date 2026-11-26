@@ -143,16 +143,19 @@ export async function buildHermesMarketingContext(
   email: string,
 ) {
   const data = await loadWorkspaceData(client, workspaceId, emptyWorkspaceData(), email);
-  const { data: memoryRows, error: memoryError } = await client
-    .from("hermes_marketing_memory")
-    .select("source_path,title,content,updated_at")
-    .eq("workspace_id", workspaceId)
-    .eq("scope", "marketing")
-    .in("source_path", [...APPROVED_OBSIDIAN_MARKETING_PATHS])
-    .order("updated_at", { ascending: false })
-    .limit(APPROVED_OBSIDIAN_MARKETING_PATHS.length);
-  if (memoryError) throw memoryError;
-  const obsidianMarketingMemory = filterMarketingMemoryDocuments(memoryRows);
+  let obsidianMarketingMemory = filterMarketingMemoryDocuments([]);
+  if (APPROVED_OBSIDIAN_MARKETING_PATHS.length > 0) {
+    const { data: memoryRows, error: memoryError } = await client
+      .from("hermes_marketing_memory")
+      .select("source_path,title,content,updated_at")
+      .eq("workspace_id", workspaceId)
+      .eq("scope", "marketing")
+      .in("source_path", [...APPROVED_OBSIDIAN_MARKETING_PATHS])
+      .order("updated_at", { ascending: false })
+      .limit(APPROVED_OBSIDIAN_MARKETING_PATHS.length);
+    if (memoryError) throw memoryError;
+    obsidianMarketingMemory = filterMarketingMemoryDocuments(memoryRows);
+  }
   const includeAmounts = role === "owner" || role === "admin";
   const context = {
     source: "Ngapaya marketing workspace",

@@ -1,7 +1,5 @@
-export const APPROVED_OBSIDIAN_MARKETING_PATHS = [
-  "Business/Brief-Konten-Opening-Sukho.md",
-  "Business/Brief_Konten_Influencer_Sukho_Ramen.md",
-] as const;
+// Obsidian memory remains disabled until company-brand notes are explicitly approved.
+export const APPROVED_OBSIDIAN_MARKETING_PATHS = [] as const;
 
 const approvedPaths = new Set<string>(APPROVED_OBSIDIAN_MARKETING_PATHS);
 
