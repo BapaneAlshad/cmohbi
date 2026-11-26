@@ -74,9 +74,8 @@ export function HermesChat({ identity, getAccessToken }: { identity: UserIdentit
   };
 
   return <>
-    {open && <section className="hermes-chat-panel" aria-label="Hermes AI marketing">
-      <header className="hermes-chat-head"><div className="hermes-chat-title"><span className="hermes-chat-orb"><Icon name="sparkles" size={17} /></span><div><strong>Hermes AI</strong><span>Asisten marketing read-only</span></div></div><div className="hermes-chat-actions"><button type="button" className="icon-button" onClick={clearConversation} aria-label="Hapus percakapan" title="Hapus percakapan"><Icon name="trash" size={14} /></button><button type="button" className="icon-button" onClick={() => setOpen(false)} aria-label="Tutup Hermes"><Icon name="close" size={16} /></button></div></header>
-      <div className="hermes-chat-scope"><Icon name="lock" size={12} /> Memori terbatas: marketing perusahaan</div>
+    {open && <section className="hermes-chat-panel" aria-label="OHEB marketing">
+      <header className="hermes-chat-head"><div className="hermes-chat-title"><span className="hermes-chat-orb"><img src="/oheb-mascot.webp" alt="" /></span><div><strong>OHEB</strong><span>Asisten marketing</span></div></div><div className="hermes-chat-actions"><button type="button" className="icon-button" onClick={clearConversation} aria-label="Hapus percakapan" title="Hapus percakapan"><Icon name="trash" size={14} /></button><button type="button" className="icon-button" onClick={() => setOpen(false)} aria-label="Tutup OHEB"><Icon name="close" size={16} /></button></div></header>
       <div className="hermes-chat-messages" aria-live="polite">
         {!messages.length && <div className="hermes-chat-empty"><span className="hermes-chat-empty-icon"><Icon name="sparkles" size={20} /></span><strong>Halo, {identity.name || "tim marketing"}</strong><p>Tanyakan data campaign, brand, konten, influencer, atau minta rekomendasi planning.</p></div>}
         {messages.map((message) => <div key={message.id} className={`hermes-chat-message ${message.role}`}>{message.content || (pending && message.role === "assistant" ? <span className="hermes-chat-typing"><i /><i /><i /></span> : null)}</div>)}
@@ -85,7 +84,7 @@ export function HermesChat({ identity, getAccessToken }: { identity: UserIdentit
       </div>
       <form className="hermes-chat-form" onSubmit={send}><textarea value={input} onChange={(event) => setInput(event.target.value)} placeholder="Tanya seputar marketing…" aria-label="Pesan untuk Hermes" maxLength={2_000} rows={2} disabled={pending} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }} /><button type={pending ? "button" : "submit"} className="hermes-chat-send" onClick={pending ? () => abortRef.current?.abort() : undefined} disabled={!pending && !input.trim()} aria-label={pending ? "Hentikan jawaban" : "Kirim pesan"}><Icon name={pending ? "close" : "send"} size={15} /></button></form>
     </section>}
-    <button type="button" className={`hermes-chat-launcher ${open ? "active" : ""}`} onClick={() => setOpen((current) => !current)} aria-label={open ? "Tutup Hermes AI" : "Buka Hermes AI"} title="Hermes AI"><span><Icon name="sparkles" size={20} /></span><i aria-hidden="true" /></button>
+    <button type="button" className={`hermes-chat-launcher ${open ? "active" : ""}`} onClick={() => setOpen((current) => !current)} aria-label={open ? "Tutup OHEB" : "Buka OHEB"} title="OHEB"><span><img src="/oheb-mascot.webp" alt="" /></span></button>
   </>;
 }
 

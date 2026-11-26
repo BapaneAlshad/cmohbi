@@ -149,8 +149,14 @@ export async function buildHermesMarketingContext(
   const includeAmounts = role === "owner" || role === "admin";
   const context = {
     source: "Ngapaya marketing workspace",
-    policy: "Gunakan hanya data berikut untuk menjawab pertanyaan.",
+    policy: "Gunakan hanya data berikut untuk menjawab pertanyaan. Tugas bulan ini dihitung dari tanggal tenggat dalam rentang bulan berjalan WIB.",
+    timezone: taskContext.timezone,
+    today: taskContext.today,
+    currentMonth: taskContext.currentMonth,
     currentUser: taskContext.currentUser,
+    myTasksThisMonth: taskContext.myTasksThisMonth,
+    myUndatedTasks: taskContext.myUndatedTasks,
+    tasks: taskContext.tasks,
     obsidianMarketingMemory: obsidianMarketingMemory.map((document) => ({
       source: document.sourcePath,
       title: document.title,
@@ -159,7 +165,6 @@ export async function buildHermesMarketingContext(
     })),
     campaigns: safeCampaigns(data, includeAmounts),
     brands: safeBrands(data, includeAmounts),
-    tasks: taskContext.tasks,
     contentCalendar: safeContent(data),
     requests: safeRequests(data),
     influencers: safeInfluencers(data, includeAmounts),
